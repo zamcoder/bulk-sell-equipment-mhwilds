@@ -1,0 +1,60 @@
+[size=5][b]Bulk Sell Equipment[/b][/size]
+Finds the appraised talismans you no longer need and sells them all at once. It works the same way the game's [b]View/Sell Equipment[/b] screen does, with the same price and the same game calls.
+
+This version sells [b]appraised talismans only[/b] (Unknown / Historical / Secret / Golden Age Charm, rarity 5-8). Weapons, armor and crafted talismans are never touched.
+
+[size=4][b]What it sells[/b][/size]
+[list]
+[*][b]Covered talismans[/b]: a talisman you keep has every skill at the same or a higher level, and slots that fit the same decorations. Weapon and armor slots are compared separately.
+[*][b]Duplicates[/b]: identical copies beyond the one that is kept.
+[*][b]Rarity rule[/b] (optional): everything up to a chosen rarity, except talismans with skills you mark as kept.
+[/list]
+Before anything is sold, every talisman is listed with its price, its verdict and the talisman kept instead. You get the game's own price (1,500 / 3,000 / 4,500 / 8,000 z for rarity 5 / 6 / 7 / 8). Every run writes a JSON receipt.
+
+[size=4][b]Never sold[/b][/size]
+[list]
+[*]The equipped talisman, and talismans used in any loadout
+[*]Favorites
+[*]Talismans with decorations attached
+[*]Crafted talismans
+[*]Talismans with an RNG Charm Crafting Set/Group bonus
+[/list]
+Each talisman is checked again right before it is sold, and anything that changed since the scan is skipped. Selling waits while a game menu is open. A run stops on its own if zenny does not go up by exactly the expected amount. If a game update removes a function the mod relies on, selling turns off by itself.
+
+[size=4][b]Requirements[/b][/size]
+[list]
+[*]REFramework (a recent nightly build is recommended)
+[*]Tested on Steam build 24705561 (October 2026)
+[/list]
+
+[size=4][b]Installation[/b][/size]
+[b]Fluffy Mod Manager[/b]: import the zip without unpacking it, then enable [i]Bulk Sell Equipment[/i].
+[b]Manual[/b]: copy the [i]reframework[/i] folder from the zip into the game folder (next to MonsterHunterWilds.exe).
+
+[size=4][b]How to use[/b][/size]
+[list=1]
+[*]Stand in the field or at camp with no game menu open, then press [b]Insert[/b].
+[*]Open [b]Script Generated UI > Bulk Sell Talismans > Show window[/b].
+[*]Click [b]Scan Equipment Box[/b], then pick your rules and review the list.
+[*]Optionally, click [b]Sell just 1 (test)[/b] first. Then click [b]Sell N talismans > Yes, sell[/b].
+[*]Let the game autosave, for example by fast travelling.
+[/list]
+[b]Sales cannot be undone. Back up your save first.[/b] Sales are written to disk at the game's next autosave. If you close the game before then, they are not kept.
+
+[size=4][b]Files[/b][/size]
+Settings: [i]reframework/data/BulkSell/config.json[/i]
+Receipts: [i]reframework/data/BulkSell/receipts/[/i]
+
+[size=4][b]Known limitations[/b][/size]
+[list]
+[*]Crafted talismans are not used when deciding what is covered.
+[*]The covered check does not count decorations you could still slot in. Decoration-aware comparison is planned.
+[*]The interface is in English. Skill names follow your game language.
+[/list]
+
+[size=4][b]Source and bug reports[/b][/size]
+[url=https://github.com/zamcoder/bulk-sell-equipment-mhwilds]github.com/zamcoder/bulk-sell-equipment-mhwilds[/url]
+When reporting a bug, please attach your receipt file and the REFramework log ([i]re2_framework_log.txt[/i] in the game folder).
+
+[size=4][b]Credits[/b][/size]
+praydog (REFramework), alphazolam and seifhassine (RSZ dumps), Quique20 (talisman encoding notes), eigeen (game-thread pattern), kvasszn (save-data field notes).
