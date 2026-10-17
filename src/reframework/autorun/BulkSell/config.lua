@@ -1,5 +1,7 @@
 -- Persistent settings for Bulk Sell, stored in reframework/data/BulkSell/config.json.
 
+local files = require("BulkSell.files")
+
 local config = {}
 
 local PATH = "BulkSell/config.json"
@@ -40,14 +42,14 @@ local function merge(defaults, loaded)
     return result
 end
 
+-- A missing or corrupt file gives the defaults.
 function config.load()
-    local ok, loaded = pcall(json.load_file, PATH)
-    return merge(DEFAULTS, ok and loaded or nil)
+    local status, loaded = files.read_json(PATH)
+    return merge(DEFAULTS, status == "ok" and loaded or nil)
 end
 
 function config.save(values)
-    local ok, result = pcall(json.dump_file, PATH, values, 2)
-    return ok and result ~= false
+    return files.write_json(PATH, values)
 end
 
 -- keep_skills as { [skill id number] = min level } for analysis.plan.

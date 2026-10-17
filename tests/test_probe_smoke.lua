@@ -126,7 +126,7 @@ add_method(equip_list_td, "guiUpdate", "System.Void", {}, function() end)
 add_method(equip_list_td, "get_Context", "System.Object", {}, function() end)
 
 -- Exercise the probe --------------------------------------------------------
-dofile(PROJECT_ROOT .. "/dev/reframework/autorun/BulkSellProbe.lua")
+dofile(PROJECT_ROOT .. "/dev/probe-v1/reframework/autorun/BulkSellProbe.lua")
 eq(#env.hooks, 0, "no hooks before the button")
 
 env.draw(nil, { ["Zenny shown in game (optional)"] = "24596095" })

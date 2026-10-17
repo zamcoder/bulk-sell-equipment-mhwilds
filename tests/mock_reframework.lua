@@ -16,6 +16,11 @@ end
 M.types = {}
 local next_address = 0x1000
 
+-- Every call into fake game objects is counted, so tests can prove that nothing
+-- touches the game (for example while the REFramework menu is closed).
+M.game_calls = 0
+local function game_call() M.game_calls = M.game_calls + 1 end
+
 function M.new_type(name, spec)
     spec = spec or {}
     local td = { name = name, fields = {}, methods = {}, parent = spec.parent, value_type = spec.value_type }
@@ -29,17 +34,25 @@ function M.new_type(name, spec)
             if m.sig == sig or m.name == sig then return m end
         end
     end
+    function td:get_field(name) return self.field_by_name and self.field_by_name[name] end
     M.types[name] = td
     return td
 end
 
-function M.add_field(td, name, type_name, static)
-    local field = { name = name, type_name = type_name, static = static == true }
+-- Static fields read their value from `static_value` (get_data(nil)).
+function M.add_field(td, name, type_name, static, static_value)
+    local field = { name = name, type_name = type_name, static = static == true, static_value = static_value }
     function field:get_name() return self.name end
     function field:get_type() return M.types[self.type_name] end
     function field:is_static() return self.static end
-    function field:get_data(obj) return obj.values[self.name] end
+    function field:get_data(obj)
+        game_call()
+        if self.static then return self.static_value end
+        return obj.values[self.name]
+    end
     td.fields[#td.fields + 1] = field
+    td.field_by_name = td.field_by_name or {}
+    td.field_by_name[name] = field
 end
 
 function M.add_method(td, name, return_type, params, impl, static)
@@ -53,7 +66,10 @@ function M.add_method(td, name, return_type, params, impl, static)
         return list
     end
     function method:is_static() return self.static end
-    function method:call(obj, ...) return self.impl(obj, ...) end
+    function method:call(obj, ...)
+        game_call()
+        return self.impl(obj, ...)
+    end
     td.methods[#td.methods + 1] = method
     return method
 end
@@ -63,8 +79,12 @@ function M.new_object(type_name, values)
     local obj = { [MOCK] = true, td = assert(M.types[type_name], type_name), values = values or {}, address = next_address }
     function obj:get_type_definition() return self.td end
     function obj:get_address() return self.address end
-    function obj:get_field(name) return self.values[name] end
+    function obj:get_field(name)
+        game_call()
+        return self.values[name]
+    end
     function obj:call(sig, ...)
+        game_call()
         local current = self.td
         while current do
             local method = current:get_method(sig)
@@ -80,8 +100,14 @@ function M.new_array(element_type, items)
     if not M.types[element_type .. "[]"] then M.new_type(element_type .. "[]", { parent = "System.Object" }) end
     local obj = M.new_object(element_type .. "[]")
     obj.items = items
-    function obj:get_size() return #self.items end
-    function obj:get_element(i) return self.items[i + 1] end
+    function obj:get_size()
+        game_call()
+        return #self.items
+    end
+    function obj:get_element(i)
+        game_call()
+        return self.items[i + 1]
+    end
     return obj
 end
 
@@ -110,7 +136,10 @@ function M.install()
     local env = {
         written = {}, files = {}, hooks = {}, pressed = {}, inputs = {}, texts = {},
         callbacks = {}, entries = {}, singletons = {}, logs = {}, storage = {},
+        drawing_ui = true, load_file_calls = 0,
+        raw = {}, parsed = {},   -- files as text for fs.read, and what json.load_string makes of a text
     }
+    fs = nil
 
     local function input(label, value)
         local new_value = env.inputs[label]
@@ -122,8 +151,14 @@ function M.install()
     end
 
     sdk = {
-        find_type_definition = function(name) return M.types[name] end,
-        get_managed_singleton = function(name) return env.singletons[name] end,
+        find_type_definition = function(name)
+            game_call()
+            return M.types[name]
+        end,
+        get_managed_singleton = function(name)
+            game_call()
+            return env.singletons[name]
+        end,
         hook = function(method, pre, post) env.hooks[#env.hooks + 1] = { method = method, pre = pre, post = post } end,
         to_int64 = function(raw) return raw end,
         to_float = function(raw) return raw end,
@@ -138,10 +173,17 @@ function M.install()
         on_pre_application_entry = function(name, fn) env.entries[name] = fn end,
         on_application_entry = function(name, fn) env.entries["post:" .. name] = fn end,
     }
-    reframework = { is_drawing_ui = function() return true end }
+    reframework = { is_drawing_ui = function() return env.drawing_ui end }
     imgui = setmetatable({
         tree_node = function() return true end,
-        begin_window = function(_, open) return open end,
+        -- env.close_window = "<title>" makes that window report one close click.
+        begin_window = function(title, open)
+            if env.close_window == title then
+                env.close_window = nil
+                return false
+            end
+            return open
+        end,
         begin_table = function() return true end,
         button = function(label)
             if env.pressed[label] then
@@ -158,13 +200,51 @@ function M.install()
         text_colored = function(text) env.texts[#env.texts + 1] = text end,
     }, { __index = function() return function() end end })
     json = {
-        load_file = function(path) return env.files[path] end,
+        load_file = function(path)
+            env.load_file_calls = env.load_file_calls + 1
+            return env.files[path]
+        end,
         dump_file = function(path, data)
             env.written[#env.written + 1] = { path = path, data = data }
             env.files[path] = data
+            if fs then env.put_raw(path, "json:" .. path .. ":" .. #env.written, data) end
             return true
         end,
     }
+
+    -- Stores a file as text. `value` is what json.load_string returns for that text
+    -- (nil = the text is not valid JSON).
+    function env.put_raw(path, text, value)
+        env.raw[path] = text
+        if value ~= nil then env.parsed[text] = value end
+    end
+
+    -- Turns on fs.read/fs.glob/json.load_string, as in current REFramework builds.
+    -- fs.glob answers with backslash paths, like it does on Windows.
+    -- Enough of std::regex for the patterns the mod uses: "\." , "[\\/]" , ".*", "^", "$".
+    local function regex_to_lua(regex)
+        return (regex:gsub("%-", "%%-"):gsub("\\%.", "%%."):gsub("%[\\\\/%]", "[\\/]"))
+    end
+
+    function env.enable_fs()
+        fs = {
+            read = function(path) return env.raw[path] or "" end,
+            glob = function(pattern)
+                local lua_pattern = regex_to_lua(pattern)
+                local matches = {}
+                for path in pairs(env.raw) do
+                    if path:find(lua_pattern) then matches[#matches + 1] = (path:gsub("/", "\\")) end
+                end
+                return matches
+            end,
+        }
+        json.load_string = function(text) return env.parsed[text] end
+        for path, data in pairs(env.files) do
+            if not env.raw[path] then env.put_raw(path, "json:" .. path, data) end
+        end
+    end
+
+    function env.game_calls() return M.game_calls end
     log = {}
     for _, level in ipairs({ "info", "warn", "error", "debug" }) do
         log[level] = function(message) env.logs[#env.logs + 1] = level .. ": " .. tostring(message) end

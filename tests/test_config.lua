@@ -47,4 +47,22 @@ eq(loaded.keep_skills.abc, nil, "non-numeric id dropped")
 json.load_file = function() error("broken") end
 eq(config.load().rule_enabled, false, "defaults when load throws")
 
+-- With fs.read available a missing config is detected without json.load_file,
+-- so REFramework logs nothing on the first run.
+local load_file_calls = 0
+json.load_file = function()
+    load_file_calls = load_file_calls + 1
+    return nil
+end
+fs = { read = function() return "" end, glob = function() return {} end }
+json.load_string = function() error("nothing to parse") end
+eq(config.load().sell_dominated, true, "defaults for a missing file")
+eq(load_file_calls, 0, "json.load_file not used")
+-- A corrupt file also gives defaults.
+fs = { read = function() return "{broken" end, glob = function() return { "BulkSell\\config.json" } end }
+json.load_string = function() return nil end
+eq(config.load().rule_max_rarity, 5, "defaults for a corrupt file")
+fs = nil
+json.load_string = nil
+
 print("config tests passed")

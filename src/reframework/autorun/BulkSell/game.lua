@@ -17,6 +17,9 @@
 -- addMoney(price, true), cEquipWork:init(), cEquipParam:updateEquipMyset().
 -- The box is not compacted afterwards, so other box indices never move.
 
+local files = require("BulkSell.files")
+local sidecar = require("BulkSell.sidecar")
+
 local game = {}
 
 local AMULET_CATEGORY = 2   -- app.EquipDef.CATEGORY.AMULET
@@ -55,6 +58,8 @@ local function methods()
             is_favorite = method("app.savedata.cEquipWork", "isFavorite()"),
             equip_set = method("app.EquipUtil", "getEquipSet(System.Int32)"),
             game_price = method("app.EquipUtil", "getEquipSellingRate(app.EquipDef.EquipSet)"),
+            save_flow = method("app.SaveDataManager", "get_IsSaveLoadFlowRunning()"),
+            show_saving = method("app.SaveDataManager", "get_IsShowSaving()"),
         }
         for _, entry in ipairs(SELL_METHODS) do m[entry[1]] = method(entry[2], entry[3]) end
         cache.methods = m
@@ -128,22 +133,11 @@ local function protected_boxes(equip)
     return reasons
 end
 
--- Talismans that RNG Charm Crafting gave a Set/Group bonus; its sidecar is keyed by box index.
--- Both files are loaded directly (REFramework logs a harmless error for a missing one):
--- skipping a file that exists would let a bonus talisman be sold.
-local function special_bonus_boxes(save_slot)
-    local boxes = {}
-    for _, suffix in ipairs({ "a", "b" }) do
-        local path = "TalismanCrafting/special-bonuses-slot-" .. tostring(save_slot) .. "-" .. suffix .. ".json"
-        local ok, store = pcall(json.load_file, path)
-        if ok and type(store) == "table" and type(store.entries) == "table" then
-            for key in pairs(store.entries) do
-                local box = tonumber(key)
-                if box then boxes[box] = true end
-            end
-        end
-    end
-    return boxes
+-- RNG Charm Crafting bonus talismans of the current save slot (see sidecar.lua).
+local function special_bonus(manager)
+    local result = sidecar.load(number(field(manager, "CurrentUserDataIndex")), files.read_json)
+    log.info("[BulkSell] RCC sidecar: " .. table.concat(result.files, ", ") .. (result.blocked and " BLOCKED" or ""))
+    return result
 end
 
 local function has_decorations(work)
@@ -218,22 +212,28 @@ local function decode(work, index)
     }
 end
 
--- Sale price as the game computes it for this box entry. Despite its name,
--- EquipUtil.getEquipSellingRate returns the price itself (1500 / 3000 / 4500 / 8000
--- for rarity 5..8, the same as the View/Sell Equipment dialog). Falls back to half
--- the talisman value, which matches the game for every appraised talisman, when the
--- game's value cannot be read for exactly this entry.
+-- Sale price as the game computes it for this box entry, and where it came from.
+-- Despite its name, EquipUtil.getEquipSellingRate returns the price itself
+-- (1500 / 3000 / 4500 / 8000 for rarity 5..8, the same as the View/Sell Equipment
+-- dialog), which is always half the talisman value. When both can be read they must
+-- agree ("mismatch" otherwise, never sold). Half the value is the fallback when the
+-- game's price cannot be read for exactly this entry.
+-- Returns price, source ("game" | "fallback"), or nil, "mismatch" | "unavailable".
 local function sale_price(base, index)
     local m = methods()
+    local from_game
     if m.equip_set and m.game_price then
         local ok, price = pcall(function()
             local set = m.equip_set:call(nil, index)
             if not set or number(set:call("get_WorkInfo"):call("get_BoxIndex")) ~= index then return nil end
             return number(m.game_price:call(nil, set))
         end)
-        if ok and price and price > 0 then return price end
+        if ok and price and price > 0 then from_game = price end
     end
-    return base and base // 2 or nil
+    if from_game and base and from_game ~= base // 2 then return nil, "mismatch" end
+    if from_game then return from_game, "game" end
+    if base then return base // 2, "fallback" end
+    return nil, "unavailable"
 end
 
 -- Reads every appraised talisman in the Equipment Box. `yield` (optional) is
@@ -247,9 +247,12 @@ function game.read_talismans(yield)
     if not box then return nil, "Equipment Box not found." end
 
     local protected = protected_boxes(equip)
-    local bonus = special_bonus_boxes(number(field(manager, "CurrentUserDataIndex")) or 0)
+    local bonus = special_bonus(manager)
     local charms = {}
-    local stats = { slots = size(box), used = 0, amulets = 0, appraised = 0, protected = 0 }
+    local stats = {
+        slots = size(box), used = 0, amulets = 0, appraised = 0, protected = 0,
+        blocked = bonus.blocked,   -- selling must stay off (shown to the player)
+    }
 
     for index = 0, stats.slots - 1 do
         local work = element(box, index)
@@ -260,10 +263,10 @@ function game.read_talismans(yield)
                 local charm = decode(work, index)
                 if charm then
                     stats.appraised = stats.appraised + 1
-                    charm.price = sale_price(charm.base_price, index)
+                    charm.price, charm.price_source = sale_price(charm.base_price, index)
                     charm.protected = protected[index]
                         or (is_favorite(work) and "favorite")
-                        or (bonus[index] and "special bonus")
+                        or (sidecar.protects(bonus, index, charm.fingerprint) and "special bonus")
                         or (has_decorations(work) and "decorations")
                         or nil
                     if charm.protected then stats.protected = stats.protected + 1 end
@@ -317,15 +320,26 @@ function game.sell_unavailable()
     return nil
 end
 
--- nil when no game menu is open, otherwise the reason selling must wait.
+-- nil when selling can run now, otherwise why it must wait: a game menu is open
+-- or the game is saving.
 function game.menu_block_reason()
     if equip_list_open then return "Close the equipment menu first." end
+    local m = methods()
     local manager = sdk.get_managed_singleton("app.GUIManager")
-    local check = methods().full_screen_ui
+    local check = m.full_screen_ui
     if not manager or not check then return "Game menus are not ready." end
     local ok, open = pcall(check.call, check, manager)
     if not ok then return "Could not check whether a game menu is open." end
     if open then return "Close the game menu first." end
+    -- A getter missing after a game update is skipped; one that fails or is not false waits.
+    local save_manager = sdk.get_managed_singleton("app.SaveDataManager")
+    for _, name in ipairs({ "save_flow", "show_saving" }) do
+        local getter = m[name]
+        if getter then
+            local saving_ok, saving = pcall(getter.call, getter, save_manager)
+            if not saving_ok or saving ~= false then return "Waiting for the game to finish saving." end
+        end
+    end
     return nil
 end
 
@@ -339,9 +353,10 @@ function game.begin_sale()
         equip = equip,
         basic = field(save, "_BasicData"),
         box = field(equip, "_EquipBox"),
-        bonus = special_bonus_boxes(number(field(manager, "CurrentUserDataIndex")) or 0),
+        bonus = special_bonus(manager),   -- read again: it may have changed since the scan
     }
     if not ctx.equip or not ctx.basic or not ctx.box then return nil, "Save data is incomplete." end
+    if ctx.bonus.blocked then return nil, ctx.bonus.blocked end
     return ctx
 end
 
@@ -354,8 +369,8 @@ function game.unchanged(ctx, charm)
 end
 
 -- Sells one talisman after re-checking it. Returns a result table:
---   { sold = true, price = n }                 sold
---   { sold = false, reason = "..." }           skipped, nothing changed
+--   { sold = true, price = n, price_source = s }    sold
+--   { sold = false, reason = "..." }                skipped, nothing changed
 --   { sold = false, fatal = true, reason = "..." }  stop the whole run
 function game.sell_one(ctx, charm)
     local index = charm.key
@@ -371,9 +386,12 @@ function game.sell_one(ctx, charm)
     if not ok or in_myset ~= false then return { sold = false, reason = "in a loadout" } end
     if is_favorite(work) then return { sold = false, reason = "favorite" } end
     if has_decorations(work) then return { sold = false, reason = "has decorations" } end
-    if ctx.bonus[index] then return { sold = false, reason = "RNG Charm Crafting bonus" } end
+    if sidecar.protects(ctx.bonus, index, current.fingerprint) then return { sold = false, reason = "RNG Charm Crafting bonus" } end
 
-    local price = sale_price(current.base_price, index)
+    local price, source = sale_price(current.base_price, index)
+    if source == "mismatch" then
+        return { sold = false, fatal = true, reason = "The game's sale price does not match the talisman's value; stopped to be safe." }
+    end
     if not price or price <= 0 then return { sold = false, fatal = true, reason = "Sale price unavailable." } end
     local before = number(m.get_money:call(ctx.basic))
 
@@ -387,10 +405,10 @@ function game.sell_one(ctx, charm)
     end
     local after = number(m.get_money:call(ctx.basic))
     if not before or not after or after - before ~= price then
-        return { sold = true, price = price, fatal = true,
+        return { sold = true, price = price, price_source = source, fatal = true,
             reason = string.format("Zenny changed by %s instead of %d; stopped to be safe.", tostring(after and before and after - before), price) }
     end
-    return { sold = true, price = price }
+    return { sold = true, price = price, price_source = source }
 end
 
 function game.money(ctx)

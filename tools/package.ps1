@@ -8,7 +8,8 @@
   manual install. The development probe (dev\) is never included.
 #>
 param(
-    [string]$Author = 'zamcoder'
+    # The zip goes to Nexus Mods, where the mod is published as evilryosaki.
+    [string]$Author = 'evilryosaki'
 )
 
 $ErrorActionPreference = 'Stop'

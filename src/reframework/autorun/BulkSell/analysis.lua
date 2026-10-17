@@ -209,6 +209,38 @@ function analysis.plan(charms, options)
     return verdicts
 end
 
+-- Skills whose best level in the box would go down if the charms in `selling`
+-- ({ [key] = true }) were sold. Returns a list sorted by skill id of
+-- { id, from, to, boxes }; `to` = 0 means no charm with that skill would remain,
+-- and `boxes` are the sold keys that held the `from` level.
+function analysis.losses(charms, selling)
+    local best, left = {}, {}
+    for _, charm in ipairs(charms) do
+        local sold = selling[charm.key] == true
+        for _, skill in ipairs(charm.skills or {}) do
+            if skill.level > (best[skill.id] or 0) then best[skill.id] = skill.level end
+            if not sold and skill.level > (left[skill.id] or 0) then left[skill.id] = skill.level end
+        end
+    end
+    local drops, by_id = {}, {}
+    for id, level in pairs(best) do
+        if (left[id] or 0) < level then
+            by_id[id] = { id = id, from = level, to = left[id] or 0, boxes = {} }
+            drops[#drops + 1] = by_id[id]
+        end
+    end
+    for _, charm in ipairs(charms) do
+        if selling[charm.key] then
+            for _, skill in ipairs(charm.skills or {}) do
+                local drop = by_id[skill.id]
+                if drop and skill.level == drop.from then drop.boxes[#drop.boxes + 1] = charm.key end
+            end
+        end
+    end
+    table.sort(drops, function(a, b) return a.id < b.id end)
+    return drops
+end
+
 -- Totals for the confirmation screen.
 function analysis.summarize(charms, verdicts)
     local summary = { sell = 0, keep = 0, zenny = 0, by_reason = {} }

@@ -166,6 +166,30 @@ local function draw_sale_result(sale)
     if sale.receipt then imgui.text("Receipt: reframework/data/" .. sale.receipt) end
 end
 
+local MAX_DROP_LINES = 8
+local MAX_DROP_BOXES = 3
+
+-- "Lowers your best Fire Resistance 3 -> 2 (#2292)" lines for analysis.losses results.
+local function drop_line(state, drop)
+    local name = state.skill_names[drop.id] or ("Skill #" .. drop.id)
+    local shown = {}
+    for i = 1, math.min(#drop.boxes, MAX_DROP_BOXES) do shown[i] = "#" .. drop.boxes[i] end
+    local boxes = table.concat(shown, ", ")
+    if #drop.boxes > MAX_DROP_BOXES then boxes = boxes .. string.format(" +%d", #drop.boxes - MAX_DROP_BOXES) end
+    if drop.to == 0 then return string.format("Removes your last %s (%s)", name, boxes) end
+    return string.format("Lowers your best %s %d -> %d (%s)", name, drop.from, drop.to, boxes)
+end
+
+local function draw_drops(state, drops)
+    for i, drop in ipairs(drops) do
+        if i > MAX_DROP_LINES then
+            imgui.text_colored(string.format("... and %d more skills", #drops - MAX_DROP_LINES), RED)
+            return
+        end
+        imgui.text_colored(drop_line(state, drop), RED)
+    end
+end
+
 local function draw_sell_controls(state, actions)
     local sale = state.sale
     if state.busy and sale and not sale.finished then
@@ -174,6 +198,7 @@ local function draw_sell_controls(state, actions)
         return
     end
     if sale then draw_sale_result(sale) end
+    if state.notice then imgui.text_colored(state.notice, YELLOW) end
     if state.busy then return end
 
     if state.block_reason then
@@ -184,6 +209,7 @@ local function draw_sell_controls(state, actions)
     if confirm then
         local what = confirm.label and ("1 talisman (" .. confirm.label .. ")") or (confirm.count .. " talismans")
         imgui.text_colored(string.format("Sell %s for %s z? This cannot be undone.", what, thousands(confirm.zenny)), YELLOW)
+        draw_drops(state, confirm.drops or {})
         if imgui.button("Yes, sell##BulkSellConfirm") then actions.confirm_sell() end
         imgui.same_line()
         if imgui.button("Cancel##BulkSellCancel") then actions.cancel_sell() end
@@ -227,6 +253,10 @@ local function draw_body(state, actions)
     imgui.text(string.format("Sell %d, keep %d, for about %s z.", summary.sell, summary.keep, thousands(summary.zenny)))
     imgui.text(string.format("Covered %d, duplicates %d, rarity rule %d, protected %d",
         reasons.dominated or 0, reasons.duplicate or 0, reasons.rule or 0, reasons.protected or 0))
+    if #(scan.drops or {}) > 0 then
+        imgui.text_colored(string.format("Selling all of these lowers your best level of %d skills (listed when you press Sell).",
+            #scan.drops), YELLOW)
+    end
     draw_sell_controls(state, actions)
 
     imgui.separator()
@@ -234,7 +264,7 @@ local function draw_body(state, actions)
 end
 
 function ui.menu(state)
-    if imgui.tree_node("Bulk Sell Talismans") then
+    if imgui.tree_node("Bulk Sell Equipment") then
         local ok, err = pcall(function()
             imgui.text("Version " .. state.version)
             if imgui.button(state.settings.window_open and "Hide window##BulkSell" or "Show window##BulkSell") then
@@ -249,7 +279,8 @@ end
 function ui.window(state, actions)
     if not state.settings.window_open or not reframework:is_drawing_ui() then return end
     pcall(function() imgui.set_next_window_size(Vector2f.new(1000, 720), FIRST_USE_EVER) end)
-    state.settings.window_open = imgui.begin_window("Bulk Sell Talismans##BulkSellWindow", true, 0)
+    -- "###" keeps the window ID fixed when the title changes (later translations).
+    state.settings.window_open = imgui.begin_window("Bulk Sell Equipment###BulkSellWindow", true, 0)
     local ok, err = pcall(draw_body, state, actions)
     if not ok then imgui.text_colored("UI error: " .. tostring(err), RED) end
     imgui.end_window()
@@ -258,5 +289,6 @@ end
 -- Exposed for tests.
 ui._thousands = thousands
 ui._verdict_text = verdict_text
+ui._drop_line = drop_line
 
 return ui

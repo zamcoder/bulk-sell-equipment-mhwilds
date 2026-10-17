@@ -22,7 +22,7 @@ Panduan ini untuk maintainer: cara membuat zip rilis lalu meng-upload-nya ke hal
    powershell -ExecutionPolicy Bypass -File tools\deploy.ps1 -Remove
    ```
 2. Buka **Fluffy Mod Manager**, pilih Monster Hunter Wilds, lalu import zip dari `dist\` (jangan diekstrak) dan aktifkan **Bulk Sell Equipment**.
-3. Jalankan game. Di menu REFramework (Insert), buka Script Generated UI → Bulk Sell Talismans, lalu pastikan versinya benar dan **Scan** berjalan.
+3. Jalankan game. Di menu REFramework (Insert), buka Script Generated UI → Bulk Sell Equipment, lalu pastikan versinya benar dan **Scan** berjalan.
 4. Ambil 2–3 screenshot untuk halaman Nexus. Pakai F12 Steam atau Win+Shift+S:
    - window Bulk Sell setelah Scan;
    - daftar "To sell";
@@ -80,10 +80,12 @@ Cek pratinjau halaman, lalu klik **Publish**.
 
 ## 4. Merilis update
 
-1. Ubah kode, naikkan `VERSION`, jalankan `tools\check.py`, lalu `tools\package.ps1`.
-2. Di halaman mod Nexus, buka **Manage → Files**, lalu upload zip baru sebagai **Main Files**. Pindahkan file lama ke **Old versions** (atau *Archived*).
-3. Isi **Changelog** di halaman mod: tulis apa yang berubah dan perbaikan apa saja.
-4. Commit lalu push ke GitHub. Sebaiknya beri tag versi:
+1. Ubah kode, naikkan `VERSION`, lalu tambah entri baru di `CHANGELOG.md`.
+2. Jalankan `tools\check.py` dan `tests\test_tools.ps1`, lalu `tools\package.ps1`.
+3. Di halaman mod Nexus, buka **Mod details** dan ubah kolom **Version** ke versi baru. Langkah ini sempat terlewat waktu v0.2.2 di-upload, sehingga kolomnya masih tertulis "1". Kalau versinya tidak diubah, pengecekan update di Nexus/Vortex jadi salah.
+4. Buka **Manage → Files**, upload zip baru sebagai **Main Files** dengan versi yang sama, lalu pindahkan file lama ke **Old versions** (atau *Archived*).
+5. Isi **Changelog** di halaman mod. Teksnya bisa disalin dari `CHANGELOG.md`.
+6. Commit lalu push ke GitHub. Sebaiknya beri tag versi:
    ```powershell
    git tag v1.0.0
    git push origin main --tags
@@ -91,7 +93,8 @@ Cek pratinjau halaman, lalu klik **Publish**.
 
 ## 5. Checklist sebelum publish
 
-- [ ] Test lolos (`tools\check.py`)
+- [ ] Test lolos (`tools\check.py` dan `tests\test_tools.ps1`)
+- [ ] Entri baru di `CHANGELOG.md`
 - [ ] Zip sudah diuji lewat Fluffy di instalasi yang bersih (probe dev sudah dilepas)
 - [ ] `VERSION` di kode, di `modinfo.ini` (otomatis dari package), dan di Nexus sama
 - [ ] README dan deskripsi Nexus sudah sesuai dengan fitur versi ini

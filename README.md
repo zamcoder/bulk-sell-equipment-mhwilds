@@ -28,11 +28,17 @@ These talismans are never sold:
 
 The mod also checks itself while it sells:
 
-- **Each box entry is checked again right before it is sold.** A talisman that changed since the scan is skipped. So is a covered talisman or duplicate whose kept talisman is gone.
-- **Selling waits** while a game menu is open.
+- **A confirmation only sells the list it showed.** If the rules change or the box is scanned again before you press "Yes, sell", the confirmation is withdrawn.
+- **The whole list is checked against the plan before the first talisman is sold**, and each box entry is checked again right before it is sold. A talisman that changed since the scan is skipped. So is a covered talisman or duplicate whose kept talisman is gone.
+- **The confirmation lists the skills whose best level would go down.** For example: "Removes your last Fire Resistance (#2292)".
+- **Selling waits** while a game menu is open or the game is saving.
+- **The sale price is checked twice.** It must equal half the talisman's value, which is what the game pays.
 - **A run stops on its own** if zenny does not go up by exactly the expected amount.
 - **The confirmation expires** after 20 seconds, and a **Stop** button ends a run early.
-- **Missing game functions disable selling.** If a game update removes a function the mod relies on, selling turns off and the window names the missing function.
+- **Selling turns off, with the reason shown, when the mod cannot check something:**
+  - a game update removed a function the mod relies on (the window names it);
+  - RNG Charm Crafting's bonus file exists but cannot be read;
+  - the save slot is unknown.
 
 Sales cannot be undone. Back up your save first. It is in `Steam\userdata\<your id>\2246340\remote`.
 
@@ -52,7 +58,7 @@ The game writes sales to disk at its next autosave. If you close the game before
 ## Usage
 
 1. Stand in the field or at camp with no game menu open. Press **Insert** to open REFramework.
-2. Open **Script Generated UI**, then **Bulk Sell Talismans**, then click **Show window**.
+2. Open **Script Generated UI**, then **Bulk Sell Equipment**, then click **Show window**.
 3. Click **Scan Equipment Box**. Scanning only reads your talismans.
 4. Pick your rules:
    - The **covered talismans and duplicates** option is on by default.
@@ -72,8 +78,9 @@ The game writes sales to disk at its next autosave. If you close the game before
 
 ## Compatibility
 
-- **RNG Charm Crafting:** talismans with its Set or Group bonus are protected.
-  - The REFramework log may show `[JSON] Failed to load file TalismanCrafting/special-bonuses-slot-0-b.json`. That file simply does not exist yet, and the message is harmless.
+- **RNG Charm Crafting:** talismans with its Set or Group bonus are protected. They are recognised by box index and by the talisman itself.
+  - The REFramework log may show `[JSON] Failed to load file TalismanCrafting/special-bonuses-slot-0-b.json` when the game starts. RNG Charm Crafting writes that line itself while that file does not exist yet, and it is harmless. Bulk Sell reads the file without adding log lines.
+  - If the window says an RNG Charm Crafting file could not be read, selling stays off. This is deliberate: selling could otherwise remove a bonus talisman. Fix the file or remove it with the game closed, then scan again.
 - **Other mods:** mods that change talisman data or the View/Sell Equipment screen have not been tested together with this one.
 - **Online play:** the mod was tested solo only.
 
@@ -97,15 +104,20 @@ You can delete `reframework/data/BulkSell/` as well. It only holds settings and 
 | Path | Contents |
 |---|---|
 | `src/reframework/` | The mod, as it is shipped |
-| `dev/reframework/` | `BulkSellProbe.lua`, a discovery tool that is never shipped: save data snapshots, method dumps, call traces |
-| `tests/` | Lua unit tests and smoke tests against a fake REFramework API |
+| `dev/<set>/reframework/` | Development scripts that are never shipped, one set per test session: `probe-lite` (read-only checks), `compensate` (a one-time fix), and `probe-v1` (the original discovery probe: snapshots, method dumps, call traces) |
+| `tests/` | Lua unit tests and smoke tests against a fake REFramework API, and `test_tools.ps1` for the PowerShell tools |
 | `tools/` | Development scripts |
 
 The scripts in `tools/`:
 
-- `check.py` runs a syntax check and all tests with Lua 5.4.
-- `deploy.ps1` copies the mod into the game. `-Dev` also copies the probe, and `-Remove` uninstalls both.
-- `backup-save.ps1` copies the save folder safely, even while the game is running.
+- `check.py` runs a syntax check and all Lua tests with Lua 5.4.
+- `deploy.ps1` copies the mod into the game.
+  - `-Dev <set>` also copies one dev set.
+  - `-RemoveDev` removes the dev files.
+  - `-Remove` uninstalls everything.
+  - `-Release <zip>` puts a release build back.
+- `backup-save.ps1` copies the Steam save and the BulkSell / TalismanCrafting data folders safely, even while the game is running.
+- `restore-save.ps1` puts such a backup back. It refuses while the game runs, checks every hash, and backs up the current state first. `-DryRun` only shows what would change.
 - `package.ps1` builds the release zip in `dist/`.
 
 To run the tests:
@@ -114,7 +126,14 @@ To run the tests:
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install lupa
 .venv\Scripts\python.exe -I tools\check.py
+powershell -ExecutionPolicy Bypass -File tests\test_tools.ps1
 ```
+
+## Author and license
+
+- **Author:** zamcoder on GitHub, published as **evilryosaki** on [Nexus Mods](https://www.nexusmods.com/monsterhunterwilds/mods/5148).
+- **License:** [MIT](LICENSE).
+- **Changes:** see [CHANGELOG.md](CHANGELOG.md).
 
 ## Credits
 

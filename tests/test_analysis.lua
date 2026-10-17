@@ -167,6 +167,33 @@ test("every sold charm is covered by a kept charm (random boxes)", function()
     end
 end)
 
+test("losses: selling the only holder removes the skill", function()
+    local charms = { charm(1, 5, "9:2"), charm(2, 5, "10:1") }
+    local drops = analysis.losses(charms, { [1] = true })
+    eq(#drops, 1, "one drop")
+    eq(drops[1].id, 9, "skill")
+    eq(drops[1].from, 2, "from")
+    eq(drops[1].to, 0, "to")
+    eq(drops[1].boxes[1], 1, "box")
+end)
+
+test("losses: a lower level left behind and several top holders", function()
+    local charms = { charm(1, 5, "9:3"), charm(2, 5, "9:3"), charm(3, 5, "9:1"), charm(4, 5, "9:3,10:2") }
+    local drops = analysis.losses(charms, { [1] = true, [2] = true })
+    eq(#drops, 0, "a top holder stays")
+    drops = analysis.losses(charms, { [1] = true, [2] = true, [4] = true })
+    eq(#drops, 2, "two skills drop")
+    eq(drops[1].id, 9, "sorted by id")
+    eq(drops[1].to, 1, "lower level left")
+    eq(#drops[1].boxes, 3, "every sold top holder listed")
+    eq(drops[2].id, 10, "second skill")
+    eq(drops[2].to, 0, "second skill gone")
+end)
+
+test("losses: nothing sold, nothing lost", function()
+    eq(#analysis.losses({ charm(1, 5, "9:2") }, {}), 0, "no drops")
+end)
+
 test("yield is called while analysing large boxes", function()
     local charms = {}
     for key = 1, 300 do charms[key] = charm(key, 5, (key % 40) .. ":" .. (key % 3 + 1)) end
