@@ -8,6 +8,7 @@
 -- spread over frames, and only while the REFramework menu is open.
 
 local analysis = require("BulkSell.analysis")
+local capacity = require("BulkSell.capacity")
 local config = require("BulkSell.config")
 local explain = require("BulkSell.explain")
 local export = require("BulkSell.export")
@@ -15,6 +16,7 @@ local files = require("BulkSell.files")
 local game = require("BulkSell.game")
 local lang = require("BulkSell.lang")
 local picks = require("BulkSell.picks")
+local seen = require("BulkSell.seen")
 local skills = require("BulkSell.skills")
 local stars = require("BulkSell.stars")
 local ui = require("BulkSell.ui")
@@ -31,6 +33,7 @@ local DEBUG_DIR = "BulkSell/debug/"
 local MAX_KEPT_FOR = 10          -- refs listed per receipt entry
 local SKILLS_CONFIRM = 10        -- "Set shown" on more skills than this asks first
 local EXPORT_DIR = "BulkSell/export/"
+local WATCH_SECONDS = 5          -- auto-clean: how often the box is looked at while the menu is closed
 -- Jobs that change the game finish on their own (and write their records) when the menu closes.
 local STOPS_ITSELF = { sell = true, star = true }
 -- Name languages for the wiki-db export: label key, via.Language value, file and site tag.
@@ -71,6 +74,12 @@ local state = {
     star_confirm = nil,   -- a pending star job: { kind, keys, want, revision }
     star_run = nil,       -- progress and result of the last star job
     export_result = nil,  -- what the last export did
+    seen = nil,           -- box contents at the last scan, for new arrivals
+    arrivals = {},        -- [box] = fingerprint of talismans that arrived since they were last cleared
+    free_at_scan = nil,   -- free box entries at the last scan
+    watch = { next_at = 0, free = nil, guards = {}, capacity = "ok" },   -- auto-clean watch
+    toast = nil,          -- { text, until }: a message shown while the REFramework menu is closed
+    toast_pending = nil,  -- a message held back while the quest result screen is up
     clipboard = nil,      -- text the UI puts on the clipboard in its next frame
     sale = nil,           -- progress and result of the last sale
     stop_requested = false,
@@ -290,12 +299,35 @@ local function scan_job()
         end
         local read = files.read_json
         if stats.save_slot ~= nil then
-            local p, st = picks.paths(stats.save_slot), stars.paths(stats.save_slot)
-            read = files.reader({ p.a, p.b, st.a, st.b })
+            local p, st, se = picks.paths(stats.save_slot), stars.paths(stats.save_slot), seen.paths(stats.save_slot)
+            read = files.reader({ p.a, p.b, st.a, st.b, se.a, se.b })
         end
         state.picks = picks.load(stats.save_slot, stats.play_start, read)
         state.stars = stars.load(stats.save_slot, stats.play_start, read)
+        state.seen = seen.load(stats.save_slot, stats.play_start, read)
+        state.arrivals = {}
     end
+    -- New arrivals: what holds another talisman than at the last scan. They stay listed until
+    -- the player clears them, or the talisman is gone.
+    for _, key in ipairs(seen.update(state.seen, charms)) do state.arrivals[key] = true end
+    local by_key = {}
+    for _, charm in ipairs(charms) do by_key[charm.key] = charm end
+    for key, fp in pairs(state.arrivals) do
+        local charm = by_key[key]
+        if not charm then
+            state.arrivals[key] = nil
+        elseif fp == true then
+            state.arrivals[key] = charm.fingerprint
+        elseif charm.fingerprint ~= fp then
+            state.arrivals[key] = nil
+        end
+    end
+    if state.seen.dirty and state.seen.slot ~= nil then
+        coroutine.yield()   -- a file write gets a frame of its own
+        if not seen.save(state.seen, files.write_json, files.read_json) then log_error("could not save the new-arrivals baseline") end
+    end
+    state.free_at_scan = stats.empty_reported or (stats.slots - stats.used)
+    state.watch.free = state.free_at_scan
     for _, key in ipairs(stars.stale_keys(state.stars, charms)) do stars.forget(state.stars, key) end
     save_stars()
     analyse(charms, stats, new_count)
@@ -379,7 +411,7 @@ local function write_receipt(sale, scan, confirm)
     -- REFramework writes an empty Lua table as null, so empty lists become "none".
     local ok = files.write_json(path, {
         version = VERSION,
-        trigger = "manual",
+        trigger = confirm.trigger or "manual",
         started = sale.started,
         finished = sale.finished,
         sold = sale.sold,
@@ -654,7 +686,7 @@ local actions = {
     analyse = request_analysis,
     -- kind: "all" (every planned sale), "shown" (the planned sales in `list`, the rows the
     -- filter shows) or "one" (the cheapest planned sale in `list`).
-    request_sell = function(kind, list)
+    request_sell = function(kind, list, trigger)
         local scan = state.scan
         if not scan or state.job or state.stale or state.analyse_at then return end
         local chosen = planned_sales(kind == "all" and scan.charms or list or scan.charms)
@@ -688,6 +720,7 @@ local actions = {
             drops = drops,
             shapes = shapes,
             rules_hash = scan.rules_hash,
+            trigger = trigger,
             need_unique = unique_rule > 0 and not (ack and ack.hash == scan.rules_hash and unique_rule <= ack.count),
             need_loss = #drops > 0 or #shapes > 0,
             ack_unique = false,
@@ -776,6 +809,9 @@ local actions = {
     clipboard_done = function()
         state.clipboard = nil
     end,
+    clear_arrivals = function()
+        state.arrivals = {}
+    end,
 
     -- Skills panel: one skill, the skills a Find shows, Undo and Reset all.
     set_skill = function(id, pref)
@@ -832,6 +868,48 @@ local function on_menu_closed()
     if state.job and not STOPS_ITSELF[state.job_name] then cancel_job() end
 end
 
+local function show_toast(text)
+    state.toast = { text = text, until_at = os.clock() + state.settings.toast_seconds }
+end
+
+-- Auto-clean watch, opt-in: while the REFramework menu is closed, look at the number of free
+-- box entries every few seconds (the only game calls then), log changes of the quest and save
+-- state, and tell the player about new items or a nearly full box. It never sells anything.
+local function watch_box()
+    local w, now = state.watch, os.clock()
+    if now < w.next_at then return end
+    w.next_at = now + WATCH_SECONDS
+    local guards = game.guard_state()
+    for _, name in ipairs(game.GUARD_NAMES) do
+        if guards[name] ~= w.guards[name] then
+            log_info(string.format("watch: %s %s -> %s", name, tostring(w.guards[name]), tostring(guards[name])))
+        end
+    end
+    w.guards = guards
+    -- The quest result screen first: messages wait until it is gone.
+    if state.toast_pending and guards.result_flow ~= true then
+        show_toast(state.toast_pending)
+        state.toast_pending = nil
+    end
+    local free, total = game.box_free()
+    if not free then return end
+    if w.free and free < w.free then
+        local text = T("toast_new_items", (state.free_at_scan or w.free) - free)
+        if guards.result_flow ~= true then show_toast(text) else state.toast_pending = text end
+        if state.scan then state.stale = true end
+    end
+    w.free = free
+    if state.settings.capacity_toast then
+        local cap = capacity.of(total - free, total)
+        local level = cap and cap.level or "ok"
+        if level ~= "ok" and level ~= w.capacity then
+            local text = T("toast_capacity", free)
+            if guards.result_flow ~= true then show_toast(text) else state.toast_pending = text end
+        end
+        w.capacity = level
+    end
+end
+
 game.install_hooks()
 
 -- Runs the current job on the game thread within the frame budget.
@@ -840,6 +918,13 @@ re.on_pre_application_entry("UpdateBehavior", function()
     local drawing = reframework:is_drawing_ui()
     if state.drawing and not drawing then on_menu_closed() end
     state.drawing = drawing
+    if state.settings.auto_clean and not drawing then
+        local ok, err = pcall(watch_box)
+        if not ok then
+            log_error("auto-clean watch stopped: " .. tostring(err))
+            state.settings.auto_clean = false
+        end
+    end
 
     -- The game is only asked about menus while the window can actually be seen.
     if drawing and state.settings.window_open then
@@ -906,6 +991,11 @@ end)
 re.on_draw_ui(function()
     ui.menu(state)
     ui.window(state, actions)
+end)
+
+-- Messages while the REFramework menu is closed; only reads Lua state.
+re.on_frame(function()
+    ui.toast(state)
 end)
 
 re.on_config_save(function()

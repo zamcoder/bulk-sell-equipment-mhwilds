@@ -414,6 +414,49 @@ function game.begin_sale()
     return ctx
 end
 
+-- Free Equipment Box entries and the box size, for the auto-clean watch while the
+-- REFramework menu is closed. Returns nil when the game cannot tell.
+function game.box_free()
+    local save = game.save()
+    local equip = save and field(save, "_Equip")
+    local getter = methods().empty_box_num
+    if not equip or not getter then return nil end
+    local ok, free = pcall(getter.call, getter, equip)
+    free = ok and number(free) or nil
+    return free, size(field(equip, "_EquipBox"))
+end
+
+-- Quest and save state for the auto-clean watch. Each value is true, false, or nil when
+-- the getter is missing or fails (a game update): the watch then treats it as unknown.
+local GUARDS = {
+    { "quest_active", "app.MissionManager", "get_IsActiveQuest()" },
+    { "quest_playing", "app.MissionManager", "get_IsPlayingQuest()" },
+    { "quest_result", "app.MissionManager", "get_IsQuestResult()" },
+    { "result_flow", "app.GUIManager", "isQuestResultFlowActive()" },
+    { "save_flow", "app.SaveDataManager", "get_IsSaveLoadFlowRunning()" },
+    { "show_saving", "app.SaveDataManager", "get_IsShowSaving()" },
+}
+game.GUARD_NAMES = {}
+for i, guard in ipairs(GUARDS) do game.GUARD_NAMES[i] = guard[1] end
+
+function game.guard_state()
+    cache.guards = cache.guards or {}
+    local state = {}
+    for _, guard in ipairs(GUARDS) do
+        local m = cache.guards[guard[1]]
+        if m == nil then
+            m = method(guard[2], guard[3]) or false
+            cache.guards[guard[1]] = m
+        end
+        local owner = m and sdk.get_managed_singleton(guard[2])
+        if owner then
+            local ok, value = pcall(m.call, m, owner)
+            if ok and type(value) == "boolean" then state[guard[1]] = value end
+        end
+    end
+    return state
+end
+
 -- What a star job needs: the Equipment Box and the favorite methods.
 function game.begin_star()
     local save, reason = game.save()

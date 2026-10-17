@@ -31,6 +31,9 @@ local DEFAULTS = {
     max_rarity = 8,
     decorations = "off",
     debug = false,              -- write plan dumps and timing lines for bug reports
+    auto_clean = false,         -- watch the box while the REFramework menu is closed and tell about new items
+    capacity_toast = false,     -- also tell when the box is almost full
+    toast_seconds = 12,         -- how long such a message stays
     keep_skills = { _format = MAPS.keep_skills },
     ignore_skills = { _format = MAPS.ignore_skills },
     skill_places = { _format = MAPS.skill_places },
@@ -75,6 +78,9 @@ function config.validate(loaded)
     if type(loaded) ~= "table" then return result end
     if type(loaded.window_open) == "boolean" then result.window_open = loaded.window_open end
     if type(loaded.debug) == "boolean" then result.debug = loaded.debug end
+    if type(loaded.auto_clean) == "boolean" then result.auto_clean = loaded.auto_clean end
+    if type(loaded.capacity_toast) == "boolean" then result.capacity_toast = loaded.capacity_toast end
+    result.toast_seconds = integer_in(loaded.toast_seconds, 3, 60) or DEFAULTS.toast_seconds
     if MODES[loaded.mode] then result.mode = loaded.mode end
     result.best_n = integer_in(loaded.best_n, 1, 10) or DEFAULTS.best_n
     result.max_rarity = integer_in(loaded.max_rarity, 5, 8) or DEFAULTS.max_rarity

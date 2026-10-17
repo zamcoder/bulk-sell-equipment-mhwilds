@@ -28,7 +28,9 @@ local YELLOW = 0xFF40FFFF
 local GREEN = 0xFF60FF60
 local GREY = 0xFFA0A0A0
 local FILTERS = { "filter_to_sell", "filter_to_keep", "filter_all", "filter_picks", "filter_unique", "filter_changed",
-    "filter_last" }
+    "filter_last", "filter_new" }
+local FILTER_NEW = 8
+local TOAST_FLAGS = 201583   -- NoDecoration | NoMove | AlwaysAutoResize | NoSavedSettings | NoFocusOnAppearing | NoInputs
 local FILTER_CHANGED = 6
 local SKILLS_HEIGHT = 300   -- pixels of the Skills list
 local RARITIES = { 5, 6, 7, 8 }
@@ -102,6 +104,7 @@ local function matches(scan, charm)
     if f == 5 and not (v.action == "sell" and v.unique) then return false end
     if f == 6 and not (scan.last_change and scan.last_change.keys[charm.key]) then return false end
     if f == 7 and not (scan.last_of_kind and scan.last_of_kind[charm.key]) then return false end
+    if f == FILTER_NEW and not view.arrivals[charm.key] then return false end
     if not view.rarity[charm.rarity] then return false end
     local find = view.find
     if find ~= "" then
@@ -115,7 +118,7 @@ end
 local function filtered_rows(scan)
     local mask = {}
     for _, r in ipairs(RARITIES) do mask[#mask + 1] = view.rarity[r] and "1" or "0" end
-    local key = table.concat({ scan.revision, view.filter, view.find, table.concat(mask) }, "|")
+    local key = table.concat({ scan.revision, view.filter, view.find, table.concat(mask), view.arrivals_count or 0 }, "|")
     if view.rows_key ~= key then
         local rows, sell, zenny = {}, 0, 0
         for _, charm in ipairs(scan.charms) do
@@ -431,15 +434,19 @@ local function draw_sell_controls(state, actions, rows)
     local shown = view.rows_sell or 0
     if shown > 0 and shown < count then
         imgui.same_line()
-        if imgui.button(T("sell_shown", shown) .. "##BulkSellShown") then actions.request_sell("shown", rows) end
+        if imgui.button(T("sell_shown", shown) .. "##BulkSellShown") then
+            actions.request_sell("shown", rows, view.filter == FILTER_NEW and "auto-clean" or nil)
+        end
     end
     if shown > 0 then
         imgui.same_line()
-        if imgui.button(T("sell_one") .. "##BulkSellOne") then actions.request_sell("one", rows) end
+        if imgui.button(T("sell_one") .. "##BulkSellOne") then
+            actions.request_sell("one", rows, view.filter == FILTER_NEW and "auto-clean" or nil)
+        end
     end
 end
 
-local function draw_summary(state)
+local function draw_summary(state, actions)
     local scan = state.scan
     local summary, reasons = scan.summary, scan.summary.by_reason
     local totals = plan_totals(scan)
@@ -464,6 +471,16 @@ local function draw_summary(state)
         local points = 0
         for rarity, n in pairs(summary.by_rarity) do points = points + n * (export.MELD_POINTS[rarity] or 0) end
         say(T("planner", thousands(summary.zenny), thousands(points)), GREY)
+    end
+    if (view.arrivals_count or 0) > 0 then
+        imgui.text_colored(T("arrivals_line", view.arrivals_count), YELLOW)
+        imgui.same_line()
+        if imgui.button(T("arrivals_show") .. "##BulkSellShowNew") then view.filter, view.page = FILTER_NEW, 1 end
+        imgui.same_line()
+        if imgui.button(T("arrivals_clear") .. "##BulkSellClearNew") then
+            actions.clear_arrivals()
+            view.arrivals, view.arrivals_count = {}, 0
+        end
     end
     local change = scan.last_change
     if change and change.count > 0 then
@@ -688,7 +705,15 @@ local function draw_notices(state, actions)
     end
 end
 
+local function count_keys(t)
+    local n = 0
+    for _ in pairs(t) do n = n + 1 end
+    return n
+end
+
 local function draw_body(state, actions)
+    view.arrivals = state.arrivals or {}
+    view.arrivals_count = count_keys(view.arrivals)
     if state.error then imgui.text_colored(T("error", state.error), RED) end
 
     if state.busy then
@@ -720,7 +745,7 @@ local function draw_body(state, actions)
     draw_rules(state, actions)
 
     imgui.separator()
-    draw_summary(state)
+    draw_summary(state, actions)
     local rows = filtered_rows(scan)
     draw_sell_controls(state, actions, rows)
 
@@ -737,6 +762,12 @@ function ui.menu(state)
             imgui.text(T("version", state.version))
             if imgui.button((state.settings.window_open and T("hide_window") or T("show_window")) .. "##BulkSell") then
                 state.settings.window_open = not state.settings.window_open
+            end
+            local auto_changed, auto = imgui.checkbox(T("auto_clean") .. "##BulkSellAutoClean", state.settings.auto_clean)
+            if auto_changed then state.settings.auto_clean = auto end
+            if state.settings.auto_clean then
+                local cap_changed, cap = imgui.checkbox(T("capacity_toast") .. "##BulkSellCapacityToast", state.settings.capacity_toast)
+                if cap_changed then state.settings.capacity_toast = cap end
             end
             local changed, debug = imgui.checkbox(T("debug_files") .. "##BulkSellDebug", state.settings.debug)
             if changed then state.settings.debug = debug end
@@ -761,6 +792,22 @@ function ui.window(state, actions)
     state.settings.window_open = imgui.begin_window(T("window_title") .. "###BulkSellWindow", true, 0)
     local ok, err = pcall(draw_body, state, actions)
     if not ok then imgui.text_colored(T("ui_error", tostring(err)), RED) end
+    imgui.end_window()
+end
+
+-- A short message in a corner while the REFramework menu is closed. It takes no input and
+-- only reads Lua state (it is drawn from re.on_frame).
+function ui.toast(state)
+    local toast = state.toast
+    if not toast then return end
+    if os.clock() > toast.until_at then
+        state.toast = nil
+        return
+    end
+    if reframework:is_drawing_ui() then return end
+    pcall(function() imgui.set_next_window_pos(Vector2f.new(40, 140), 1) end)   -- ImGuiCond_Always
+    imgui.begin_window("Bulk Sell###BulkSellToast", nil, TOAST_FLAGS)
+    imgui.text(toast.text)
     imgui.end_window()
 end
 

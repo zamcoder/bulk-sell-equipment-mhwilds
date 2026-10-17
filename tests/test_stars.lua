@@ -56,4 +56,23 @@ test("only stars Bulk Sell added, on the same talisman and still a favorite, can
     eq(store.dirty, true, "dirty")
 end)
 
+test("new arrivals: what holds another talisman than at the last scan", function()
+    local seen = require("BulkSell.seen")
+    local store = seen.load(0, "1", disk().read)
+    local first = { talisman(1, "a"), talisman(2, "b") }
+    eq(#seen.update(store, first), 0, "the first scan has no arrivals")
+    eq(store.dirty, true, "baseline taken")
+    store.dirty = false
+    eq(#seen.update(store, first), 0, "nothing new")
+    eq(store.dirty, false, "unchanged baseline is not written again")
+    local later = { talisman(1, "a"), talisman(2, "c"), talisman(3, "d") }
+    local arrivals = seen.update(store, later)
+    eq(table.concat(arrivals, ","), "2,3", "a changed entry and a new one")
+    eq(#seen.update(store, { talisman(1, "a") }), 0, "sold talismans are not arrivals")
+    eq(store.entries[2], nil, "and leave the baseline")
+    local d = disk()
+    assert(seen.save(store, d.write, d.read), "saved")
+    eq(d.files["BulkSell/seen/slot-0-a.json"].boxes["1"].fp, "a", "file")
+end)
+
 runner.run()

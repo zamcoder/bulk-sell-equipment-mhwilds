@@ -119,6 +119,13 @@ env.singletons["app.SaveDataManager"] = save_manager
 local full_screen = false
 local gui_manager_td = new_type("app.GUIManager", { parent = "System.Object" })
 add_method(gui_manager_td, "isOpenFullScreenUI", "System.Boolean", {}, function() return full_screen end)
+local result_flow, in_quest = false, false
+add_method(gui_manager_td, "isQuestResultFlowActive", "System.Boolean", {}, function() return result_flow end)
+local mission_td = new_type("app.MissionManager", { parent = "System.Object" })
+add_method(mission_td, "get_IsActiveQuest", "System.Boolean", {}, function() return in_quest end)
+add_method(mission_td, "get_IsPlayingQuest", "System.Boolean", {}, function() return in_quest end)
+add_method(mission_td, "get_IsQuestResult", "System.Boolean", {}, function() return false end)
+env.singletons["app.MissionManager"] = new_object("app.MissionManager")
 env.singletons["app.GUIManager"] = new_object("app.GUIManager")
 
 local equip_list_td = new_type("app.GUI080001", { parent = "System.Object" })
@@ -875,6 +882,111 @@ assert(env.has("The CSV could not be written"), "no fs.write")
 fs.write = write
 env.draw(nil, { ["Names##BulkSellExportNames"] = 1, ["Export##BulkSellExportScope"] = 1 })
 assert(env.has("Selling these gives 6,000 z. Melding them would give 7 Melding Pot points instead"), "planner line")
+
+-- Auto-clean watch -------------------------------------------------------------------
+-- Free box entries now: 0, 2, 9 and 13 (4 of 14).
+local function new_talisman(index, amulet_type, packed)
+    local v = at(index).values
+    v.category, v.Category_Gender, v.FreeVal0, v.FreeVal1, v.FreeVal4 = 2, 21, amulet_type, 1, 0
+    set_packed(index, packed)
+end
+local function draw_toast()
+    env.texts = {}
+    mock.in_draw = true   -- the toast must not call the game either
+    env.callbacks.frame()
+    mock.in_draw = false
+end
+assert(env.files["BulkSell/seen/slot-0-a.json"] or env.files["BulkSell/seen/slot-0-b.json"], "new-arrivals baseline saved")
+-- Earlier tests changed boxes 3, 4 and 10 and put them back, which counts as new: start clean.
+rescan()
+env.draw({ "Clear##BulkSellClearNew" })
+env.draw(nil, { ["Tell me about new items while the menu is closed (auto-clean)##BulkSellAutoClean"] = true })
+eq(T.state.settings.auto_clean, true, "auto-clean on")
+env.drawing_ui = false
+frames(1)   -- the first look only takes the baseline
+draw_toast()
+eq(#env.texts, 0, "no message yet")
+local calls_after_look = env.game_calls()
+frames(100)   -- 2 s: no new look yet
+eq(env.game_calls(), calls_after_look, "no game calls between two looks")
+new_talisman(2, 190, { 1005, 0, 0, 1000 })   -- R6 Skill5 1, A1: covered by box 3
+frames(160)
+assert(env.game_calls() > calls_after_look, "the box was looked at again")
+draw_toast()
+assert(env.has("Equipment Box: 1 new items since your last scan. Open Bulk Sell (Insert) to check."), "toast")
+eq(T.state.stale, true, "the plan is stale")
+env.advance(13)
+draw_toast()
+eq(#env.texts, 0, "the toast goes away")
+
+-- Messages wait while the quest result screen is up; quest state changes are logged once.
+result_flow, in_quest = true, true
+new_talisman(9, 189, { 1001, 0, 0, 1003 })   -- R5 Skill1 1, W1: a copy of box 1
+frames(260)
+draw_toast()
+eq(#env.texts, 0, "held back during the result screen")
+result_flow = false
+frames(260)
+draw_toast()
+assert(env.has("Equipment Box: 2 new items since your last scan."), "shown after the result screen")
+local quest_lines = 0
+for _, line in ipairs(env.logs) do
+    if line:find("watch: quest_active false -> true", 1, true) then quest_lines = quest_lines + 1 end
+end
+eq(quest_lines, 1, "a quest state change is logged once")
+in_quest = false
+
+-- Opening the menu rescans; the new talismans are listed and sold as auto-clean.
+env.drawing_ui = true
+frames(2)
+env.draw()
+assert(env.has("2 new talismans since you last cleared them."), "arrivals line")
+env.draw({ "Show new##BulkSellShowNew" })
+env.draw()
+eq(ui_view.filter, 8, "New arrivals filter")
+eq(#ui_view.rows, 2, "two rows")
+env.draw({ "Sell the 2 shown##BulkSellShown" })
+env.draw({ "Yes, sell##BulkSellConfirm" })
+frames()
+receipt = receipts()[#receipts()]
+eq(receipt.sold, 2, "both new talismans sold")
+eq(receipt.trigger, "auto-clean", "receipt trigger")
+frames(2)
+env.draw()
+assert(not env.has("new talismans since you last cleared them"), "sold arrivals leave the list")
+new_talisman(13, 190, { 1005, 0, 0, 1000 })
+rescan()
+assert(env.has("1 new talismans since you last cleared them."), "a later arrival")
+env.draw({ "Clear##BulkSellClearNew" })
+env.draw()
+assert(not env.has("new talismans since you last cleared them"), "cleared")
+env.draw(nil, { ["Show##BulkSellFilter"] = 3 })
+
+-- The box is nearly full (3 of 14 free): one message when it crosses the line.
+env.draw(nil, { ["Also tell me when the Equipment Box is almost full##BulkSellCapacityToast"] = true })
+env.drawing_ui = false
+frames(1)
+env.advance(6)
+frames(1)
+draw_toast()
+assert(env.has("Equipment Box: only 3 free slots left."), "capacity toast")
+env.advance(13)
+frames(260)
+draw_toast()
+eq(#env.texts, 0, "said once")
+
+-- Auto-clean off: nothing touches the game while the menu is closed.
+env.drawing_ui = true
+frames(2)
+env.draw(nil, { ["Tell me about new items while the menu is closed (auto-clean)##BulkSellAutoClean"] = false })
+env.drawing_ui = false
+frames(1)
+local calls_off = env.game_calls()
+frames(300)
+eq(env.game_calls(), calls_off, "no game calls with auto-clean off")
+env.drawing_ui = true
+frames(2)
+env.draw()
 
 -- Debug files: a plan dump with string keys only (so it reads back as written) and a timing line.
 env.draw(nil, { ["Write debug files (for bug reports)##BulkSellDebug"] = true })

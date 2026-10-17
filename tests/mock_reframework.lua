@@ -308,6 +308,10 @@ function M.install()
         M.in_draw = false
         if not ok then error(err, 2) end
         eq_depth(env)
+        -- The window catches its own errors and shows them; a test must never see one.
+        for _, line in ipairs(env.texts) do
+            if tostring(line):find("^UI error") then error("the window showed: " .. tostring(line), 2) end
+        end
         for label in pairs(env.pressed) do error("button not drawn: " .. label, 2) end
         for label in pairs(env.inputs) do error("input not drawn: " .. label, 2) end
     end
