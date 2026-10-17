@@ -42,6 +42,7 @@ local SELL_METHODS = {
 
 local cache = { methods = nil, skill_names = {}, prices = {} }
 local equip_list_open = false   -- app.GUI080001 (equipment lists, including View/Sell Equipment)
+local equip_list_opened = false -- set when such a list opens; read (and cleared) by take_list_opened()
 
 local function method(type_name, signature)
     local td = sdk.find_type_definition(type_name)
@@ -60,6 +61,7 @@ local function methods()
             game_price = method("app.EquipUtil", "getEquipSellingRate(app.EquipDef.EquipSet)"),
             save_flow = method("app.SaveDataManager", "get_IsSaveLoadFlowRunning()"),
             show_saving = method("app.SaveDataManager", "get_IsShowSaving()"),
+            empty_box_num = method("app.savedata.cEquipParam", "getEmptyBoxNum()"),
         }
         for _, entry in ipairs(SELL_METHODS) do m[entry[1]] = method(entry[2], entry[3]) end
         cache.methods = m
@@ -236,6 +238,15 @@ local function sale_price(base, index)
     return nil, "unavailable"
 end
 
+-- Save slot and character of the loaded save: picks files are kept per slot and ignored
+-- for another character (PlayStartDateTime differs).
+local function save_identity(save, manager)
+    local slot = number(field(manager, "CurrentUserDataIndex"))
+    local start = field(save, "PlayStartDateTime")
+    if type(start) == "userdata" then start = number(start) end
+    return slot, start ~= nil and tostring(start) or nil
+end
+
 -- Reads every appraised talisman in the Equipment Box. `yield` (optional) is
 -- called every 256 entries so the caller can spread the work over frames.
 -- Returns charms and box statistics, or nil and a reason.
@@ -250,15 +261,23 @@ function game.read_talismans(yield)
     local bonus = special_bonus(manager)
     local charms = {}
     local stats = {
-        slots = size(box), used = 0, amulets = 0, appraised = 0, protected = 0,
+        slots = size(box), used = 0, amulets = 0, appraised = 0, protected = 0, categories = {},
         blocked = bonus.blocked,   -- selling must stay off (shown to the player)
     }
+    stats.save_slot, stats.play_start = save_identity(save, manager)
+    local empty_box_num = methods().empty_box_num
+    if empty_box_num then
+        local ok, value = pcall(empty_box_num.call, empty_box_num, equip)
+        stats.empty_reported = ok and number(value) or nil
+    end
 
     for index = 0, stats.slots - 1 do
         local work = element(box, index)
         if work and not is_empty(work) then
             stats.used = stats.used + 1
-            if category(work) == AMULET_CATEGORY then
+            local cat = category(work)
+            if cat then stats.categories[cat] = (stats.categories[cat] or 0) + 1 end
+            if cat == AMULET_CATEGORY then
                 stats.amulets = stats.amulets + 1
                 local charm = decode(work, index)
                 if charm then
@@ -303,12 +322,20 @@ function game.install_hooks()
         if target then
             pcall(sdk.hook, target, function() end, function(retval)
                 equip_list_open = open
+                if open then equip_list_opened = true end
                 return retval
             end)
         end
     end
     track("onOpen()", true)
     track("onClose()", false)
+end
+
+-- True once after an equipment list was opened (the box may have changed since).
+function game.take_list_opened()
+    local opened = equip_list_opened
+    equip_list_opened = false
+    return opened
 end
 
 -- nil when selling is possible on this build, otherwise the reason it is not.
@@ -321,16 +348,17 @@ function game.sell_unavailable()
 end
 
 -- nil when selling can run now, otherwise why it must wait: a game menu is open
--- or the game is saving.
+-- or the game is saving. The second value is true when the open menu could have
+-- changed the Equipment Box (the scan must then be made again).
 function game.menu_block_reason()
-    if equip_list_open then return "Close the equipment menu first." end
+    if equip_list_open then return "Close the equipment menu first.", true end
     local m = methods()
     local manager = sdk.get_managed_singleton("app.GUIManager")
     local check = m.full_screen_ui
     if not manager or not check then return "Game menus are not ready." end
     local ok, open = pcall(check.call, check, manager)
     if not ok then return "Could not check whether a game menu is open." end
-    if open then return "Close the game menu first." end
+    if open then return "Close the game menu first.", true end
     -- A getter missing after a game update is skipped; one that fails or is not false waits.
     local save_manager = sdk.get_managed_singleton("app.SaveDataManager")
     for _, name in ipairs({ "save_flow", "show_saving" }) do

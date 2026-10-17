@@ -3,11 +3,19 @@
 local mock = require("mock_reframework")
 local eq = mock.eq
 local env = mock.install()
+env.guard_draw = true   -- the UI must never call the game
 local new_type, add_field, add_method = mock.new_type, mock.add_field, mock.add_method
 local new_object, new_array, boxed = mock.new_object, mock.new_array, mock.boxed_array
 
 BULKSELL_TEST = {}
 local LIST_CHANGED = "The list changed; review and press Sell again."
+
+-- On a failed check, show what the last frame drew.
+local real_assert = assert
+local function assert(condition, message, ...)
+    if not condition then print("---- last frame:\n" .. table.concat(env.texts, "\n")) end
+    return real_assert(condition, message, ...)
+end
 
 -- Fake save data ------------------------------------------------------------
 local work_td = new_type("app.savedata.cEquipWork", { parent = "System.Object" })
@@ -36,15 +44,19 @@ end
 
 local items = {
     work(2, 189, 1, nil, nil, 0x80),                         -- 0 unused box entry
-    work(2, 189, 1, { 1001, 0, 0, 1003 }),                   -- 1 R5 skill 1 lv1, W1 (equipped)
+    work(2, 189, 1, { 1001, 0, 0, 1003 }),                   -- 1 R5 Skill1 1, W1 (equipped)
     work(2, 189, 1, { 1001, 0, 0, 1003 }),                   -- 2 duplicate of 1
-    work(2, 190, 1, { 3005, 0, 0, 2110 }),                   -- 3 R6 skill 5 lv3, A2 A1 A1 (RNG bonus)
-    work(2, 189, 1, { 2005, 0, 0, 1000 }),                   -- 4 R5 skill 5 lv2, A1 (covered by 3)
+    work(2, 190, 1, { 3005, 0, 0, 2110 }),                   -- 3 R6 Skill5 3, A2 A1 A1 (RNG bonus)
+    work(2, 189, 1, { 2005, 0, 0, 1000 }),                   -- 4 R5 Skill5 2, A1 (covered by 3)
     work(1, 0, 0),                                           -- 5 a weapon
     work(2, 50, 3),                                          -- 6 a crafted talisman
-    work(2, 191, 1, { 7003, 0, 0, 1000 }, { 0, -1, -1 }),    -- 7 R7 with decoration id 0 attached
-    work(2, 189, 1, { 1001, 0, 0, 0 }),                      -- 8 R5 in a loadout
-    work(2, 189, 1, { 2009, 0, 0, 1000 }),                   -- 9 R5 skill 9 lv2, A1: the only Skill9
+    work(2, 191, 1, { 3007, 0, 0, 1000 }, { 0, -1, -1 }),    -- 7 R7 Skill7 3, A1, decoration attached
+    work(2, 189, 1, { 1001, 0, 0, 0 }),                      -- 8 R5 Skill1 1 in a loadout
+    work(2, 189, 1, { 2009, 0, 0, 1000 }),                   -- 9 R5 Skill9 2, A1: the only Skill9 2
+    work(2, 190, 1, { 1009, 1011, 0, 0 }),                   -- 10 R6 Skill9 1, Skill11 1: unique
+    work(2, 192, 1, { 3011, 0, 0, 0 }),                      -- 11 R8 Skill11 3: the best Skill11
+    work(2, 191, 1, { 1007, 1011, 0, 0 }),                   -- 12 R7 Skill7 1, Skill11 1: unique
+    work(2, 190, 1, { 1009, 1007, 0, 0 }),                   -- 13 R6 Skill9 1, Skill7 1: unique
 }
 local box = new_array("app.savedata.cEquipWork", items)
 local function at(index) return items[index + 1] end
@@ -67,6 +79,11 @@ add_method(equip_td, "isEquipIndexInMyset", "System.Boolean", { "System.Int32" }
 add_method(equip_td, "removeAccessory", "System.Void", { "app.savedata.cEquipWork", "System.Int32", "System.Boolean" },
     function() calls.remove_accessory = calls.remove_accessory + 1 end)
 add_method(equip_td, "updateEquipMyset", "System.Void", {}, function() calls.update_myset = calls.update_myset + 1 end)
+add_method(equip_td, "getEmptyBoxNum", "System.Int32", {}, function()
+    local n = 0
+    for _, w in ipairs(items) do if (w.values.Category_Gender & 0x80) ~= 0 then n = n + 1 end end
+    return n
+end)
 local equip = new_object("app.savedata.cEquipParam", {
     _EquipBox = box,
     _EquipIndex = equip_index(1),
@@ -74,21 +91,25 @@ local equip = new_object("app.savedata.cEquipParam", {
 })
 
 local money_gain = 1   -- multiplier applied by the fake addMoney; 0 simulates a zenny cap
+local after_money      -- optional function run after every addMoney
 local basic_td = new_type("app.savedata.cBasicParam", { parent = "System.Object" })
 add_method(basic_td, "getMoney", "System.Int32", {}, function(self) return self.values.money end)
-add_method(basic_td, "addMoney", "System.Void", { "System.Int32", "System.Boolean" },
-    function(self, amount) self.values.money = self.values.money + amount * money_gain end)
+add_method(basic_td, "addMoney", "System.Void", { "System.Int32", "System.Boolean" }, function(self, amount)
+    self.values.money = self.values.money + amount * money_gain
+    if after_money then after_money() end
+end)
 local basic = new_object("app.savedata.cBasicParam", { money = 1000000 })
 
 new_type("app.savedata.cUserSaveParam", { parent = "System.Object" })
-local save = new_object("app.savedata.cUserSaveParam", { _Equip = equip, _BasicData = basic })
+local save = new_object("app.savedata.cUserSaveParam", { _Equip = equip, _BasicData = basic, PlayStartDateTime = 638763618528919137 })
 
 local saving = false
 local manager_td = new_type("app.SaveDataManager", { parent = "System.Object" })
 add_method(manager_td, "getCurrentUserSaveData", "app.savedata.cUserSaveParam", {}, function() return save end)
 add_method(manager_td, "get_IsSaveLoadFlowRunning", "System.Boolean", {}, function() return saving end)
 add_method(manager_td, "get_IsShowSaving", "System.Boolean", {}, function() return false end)
-env.singletons["app.SaveDataManager"] = new_object("app.SaveDataManager", { CurrentUserDataIndex = 0 })
+local save_manager = new_object("app.SaveDataManager", { CurrentUserDataIndex = 0 })
+env.singletons["app.SaveDataManager"] = save_manager
 
 local full_screen = false
 local gui_manager_td = new_type("app.GUIManager", { parent = "System.Object" })
@@ -104,7 +125,7 @@ local message_td = new_type("app.MessageUtil", { parent = "System.Object" })
 add_method(message_td, "getHunterSkillName", "System.Guid", { "app.HunterDef.Skill" }, function(_, id) return { skill = id } end, true)
 add_method(message_td, "getText", "System.String", { "System.Guid", "System.Int32" }, function(_, guid) return "Skill" .. guid.skill end, true)
 
-local prices = { [189] = 3000, [190] = 6000, [191] = 9000 }
+local prices = { [189] = 3000, [190] = 6000, [191] = 9000, [192] = 16000 }
 new_type("app.user_data.AmuletData.cData", { parent = "System.Object" })
 local amulet_util_td = new_type("app.AmuletUtil", { parent = "System.Object" })
 add_method(amulet_util_td, "getAmuletData", "app.user_data.AmuletData.cData", { "app.savedata.cEquipWork" },
@@ -140,17 +161,36 @@ env.files[SIDECAR_A] = {
         ["3"] = { box_index = 3, identity = { free0 = 190, free1 = 1, packed = { 3005, 0, 0, 2110 } }, kind = "set", pair = 1 },
     },
 }
+-- The player's version 1 settings: rarity rule up to R5, covered sales on.
+local V1_CONFIG = { version = 1, window_open = false, sell_dominated = true, rule_enabled = true, rule_max_rarity = 5,
+    keep_skills = { _format = "skill-id-to-min-level" } }
+env.files["BulkSell/config.json"] = V1_CONFIG
 env.enable_fs()
+env.use_fake_clock()
+
+local function set_packed(index, packed) at(index).values.BowgunCustomizeId = boxed("System.Int16", packed) end
+
+-- Puts the R5 Skill5 2 talisman (covered by box 3) back into box 4 after a test sold it.
+local function restore_box4()
+    local v = at(4).values
+    v.category, v.Category_Gender, v.FreeVal0, v.FreeVal1, v.FreeVal4 = 2, 21, 189, 1, 0
+    set_packed(4, { 2005, 0, 0, 1000 })
+end
 
 -- Decoding ------------------------------------------------------------------
 local game = require("BulkSell.game")
 local charms, stats = game.read_talismans()
-eq(stats.slots, 10, "box slots")
-eq(stats.used, 9, "used slots")
-eq(stats.amulets, 8, "amulets")
-eq(stats.appraised, 7, "appraised talismans")
+eq(stats.slots, 14, "box slots")
+eq(stats.used, 13, "used slots")
+eq(stats.amulets, 12, "amulets")
+eq(stats.appraised, 11, "appraised talismans")
 eq(stats.protected, 4, "protected talismans")
 eq(stats.blocked, nil, "nothing blocks selling")
+eq(stats.save_slot, 0, "save slot")
+eq(stats.play_start, "638763618528919137", "play start")
+eq(stats.categories[2], 12, "amulets by category")
+eq(stats.categories[1], 1, "weapons by category")
+eq(stats.empty_reported, 1, "getEmptyBoxNum")
 local by_key = {}
 for _, charm in ipairs(charms) do by_key[charm.key] = charm end
 eq(by_key[0], nil, "unused entry skipped")
@@ -183,81 +223,154 @@ for _, line in ipairs(env.logs) do
 end
 assert(logged_sidecar, "sidecar status logged")
 
--- UI and game-thread jobs -------------------------------------------------------
+-- The draw guard really catches game calls made while drawing.
+mock.in_draw = true
+local guard_ok = pcall(sdk.find_type_definition, "app.GUIManager")
+mock.in_draw = false
+eq(guard_ok, false, "game call during a UI frame is an error")
+
+-- Script, migration and the first scan ---------------------------------------------
 dofile(PROJECT_ROOT .. "/src/reframework/autorun/BulkSell.lua")
 local T = BULKSELL_TEST
 assert(env.entries.UpdateBehavior, "game-thread runner registered")
 local gui_hooks = {}
 for _, hook in ipairs(env.hooks) do gui_hooks[hook.method.name] = hook end
 assert(gui_hooks.onOpen and gui_hooks.onClose, "equipment list open/close tracked")
+eq(env.files["BulkSell/config.v1.json"], V1_CONFIG, "version 1 settings kept as config.v1.json")
+eq(env.files["BulkSell/config.json"].version, 2, "settings migrated")
+eq(T.state.settings.mode, "best", "rule became best")
+eq(T.state.settings.best_n, 1, "best 1")
+eq(T.state.settings.max_rarity, 5, "up to R5")
 
 local function frames(n)
-    for _ = 1, n or 50 do env.entries.UpdateBehavior() end
+    for _ = 1, n or 50 do
+        env.advance(0.02)
+        env.entries.UpdateBehavior()
+    end
 end
 
 local function rescan()
-    env.draw({ "Scan Equipment Box" })
+    env.draw({ "Scan Equipment Box##BulkSellScan" })
     frames()
     env.draw()
 end
 
-env.draw({ "Show window##BulkSell" })
-assert(env.has_text("Scan reads your talismans"), "window shown")
-rescan()
-assert(env.has_text("Sell 2, keep 5, for about 3,000 z%."), "summary after scan")
-assert(env.has_text("Covered 1, duplicates 1, rarity rule 0, protected 4"), "reasons after scan")
-assert(env.has_text("Sell: duplicate") and env.has_text("Sell: covered"), "sell rows listed")
-assert(env.has_text("^1,500 z$"), "price column")
+local function find(text)
+    env.draw(nil, { ["Find##BulkSellFind"] = text })
+    env.draw()
+end
 
--- Nothing touches the game while the REFramework menu is closed.
+local function receipts()
+    local list = {}
+    for _, w in ipairs(env.written) do
+        if w.path:find("^BulkSell/receipts/sold_") then list[#list + 1] = w.data end
+    end
+    return list
+end
+
+local KEEP = "Keep##BulkSellKeepMode"
+local RARITY = "Sell unique talismans only up to rarity##BulkSellRarity"
+local ACK_UNIQUE = "I understand that unique talismans are sold.##BulkSellAckUnique"
+local ACK_LOSS = "I accept losing these.##BulkSellAckLoss"
+
+env.draw({ "Show window##BulkSell" })
+assert(env.has("Scan reads your talismans"), "window shown")
+assert(env.has("Your rarity rule is now \"Keep the best 1 per skill\", limited to R5"), "migration notice")
+env.draw({ "OK##BulkSellNotice1" })
+env.draw()
+assert(not env.has("Your rarity rule is now"), "notice dismissed")
+rescan()
+assert(env.has("Scanned "), "scan line")
+assert(env.has("11 appraised (4 protected) · Box 13 / 14 (1 free)"), "box line")
+assert(env.has("Sell 2 · keep 9 · about 3,000 z · box after the sale 11 / 14"), "summary at best 1 up to R5")
+assert(env.has("Duplicates 1 · covered 1 · unique 0"), "detail line")
+assert(env.has("Limited to R5. Up to R8, best 1 would sell 5 (13,500 z)."), "rarity hint")
+local keep_items = env.combos[KEEP]
+eq(#keep_items, 7, "Keep options")
+eq(keep_items[1], "Keep everything (sell only what I tick)  -  0 to sell (0 z)", "manual entry")
+eq(keep_items[2], "Keep every unique talisman (sell duplicates and covered ones)  -  2 to sell (3,000 z)", "covered entry")
+eq(keep_items[7], "Keep the best 1 per skill  -  2 to sell (3,000 z)", "best 1 entry")
+
+-- Up to R8, best 1 sells the three unique talismans too.
+env.draw(nil, { [RARITY] = 8 })
+assert(env.has("Updating the list..."), "debounced update")
+frames()
+env.draw()
+assert(env.has("Sell 5 · keep 6 · about 13,500 z"), "summary up to R8")
+assert(env.has("Duplicates 1 · covered 1 · unique 3"), "unique count")
+assert(env.has("Your best 1 for every skill and slot shape stay. No skill level leaves your box."), "promise line")
+assert(env.has("Sell · unique"), "unique verdict")
+assert(env.has("Not in your best 1 · closest Skill11 #2 of 3"), "why text of box 10")
+assert(env.has("Same as #1 (kept)"), "duplicate why")
+assert(env.has("Covered by #3 R6  Skill5 3"), "covered why")
+eq(env.files["BulkSell/config.json"].max_rarity, 8, "rarity limit saved")
+eq(env.files["BulkSell/config.json"].rule_enabled, false, "legacy rule key written off")
+
+-- Nothing touches the game while the REFramework menu is closed; reopening rescans.
+local revision = T.state.scan.revision
 env.drawing_ui = false
 local before_calls = env.game_calls()
 frames(20)
 eq(env.game_calls(), before_calls, "no game calls while the menu is closed")
+eq(T.state.stale, true, "closing the menu makes the plan stale")
 env.drawing_ui = true
+frames(1)
+env.draw()
+eq(T.state.scan.revision > revision, true, "rescanned after the menu opened again")
+eq(T.state.stale, false, "fresh again")
 
 -- Selling waits while a game menu or the equipment list is open, or while the game saves.
 full_screen = true
 frames(1)
 env.draw()
-assert(env.has_text("Close the game menu first"), "blocked by full-screen menu")
+assert(env.has("The box may have changed. Rescanning..."), "a full-screen menu makes the plan stale")
 full_screen = false
+frames(2)
+env.draw()
+assert(not env.has("Rescanning"), "rescanned once the menu closed")
 gui_hooks.onOpen.post(nil)
 frames(1)
 env.draw()
-assert(env.has_text("Close the equipment menu first"), "blocked by equipment list")
+assert(env.has("Rescanning"), "an equipment list makes the plan stale")
 gui_hooks.onClose.post(nil)
+frames(2)
+env.draw()
+assert(not env.has("Rescanning"), "rescanned after the list closed")
 saving = true
 frames(1)
 env.draw()
-assert(env.has_text("Waiting for the game to finish saving"), "waits while the game saves")
+assert(env.has("Waiting for the game to finish saving"), "waits while the game saves")
 saving = false
 frames(1)
 env.draw()
 
--- A confirmation is withdrawn when the rules change before "Yes, sell".
-env.draw({ "Sell 2 talismans##BulkSellAll" })
+-- A confirmation is withdrawn when the Keep option changes before "Yes, sell".
+env.draw({ "Sell 5 talismans##BulkSellAll" })
 env.draw()
-assert(env.has_text("Sell 2 talismans for 3,000 z%? This cannot be undone"), "confirmation shown")
-env.draw(nil, { ["Sell talismans that a kept talisman fully covers (and extra duplicates)"] = false })
+assert(env.has("Sell 5 talismans for 13,500 z? This cannot be undone."), "confirmation shown")
+assert(env.has("3 are unique: no identical or better talisman stays."), "unique line")
+assert(not env.buttons["Yes, sell##BulkSellConfirm"], "no Yes before the unique tick")
+env.draw(nil, { [KEEP] = 2 })
 env.draw()
-assert(env.has_text(LIST_CHANGED), "notice after a rule change")
-assert(not env.has_text("This cannot be undone"), "confirmation withdrawn")
+assert(env.has(LIST_CHANGED), "notice after a rule change")
+assert(not env.has("This cannot be undone"), "confirmation withdrawn")
 frames()
 env.draw()
-assert(env.has_text("Sell 0, keep 7"), "new plan after the rule change")
-eq(basic.values.money, 1000000, "nothing sold")
-env.draw(nil, { ["Sell talismans that a kept talisman fully covers (and extra duplicates)"] = true })
+assert(env.has("Sell 2 · keep 9"), "covered mode")
+assert(env.has("Only duplicates and covered talismans are sold."), "covered promise")
+env.draw(nil, { [KEEP] = 7 })
 frames()
 env.draw()
+assert(env.has("Sell 5 · keep 6"), "back to best 1")
 
 -- ...and when the box is scanned again.
-env.draw({ "Sell 2 talismans##BulkSellAll" })
+env.draw({ "Sell 5 talismans##BulkSellAll" })
 rescan()
-assert(env.has_text(LIST_CHANGED) and not env.has_text("This cannot be undone"), "rescan withdraws the confirmation")
+assert(env.has(LIST_CHANGED) and not env.has("This cannot be undone"), "rescan withdraws the confirmation")
 
 -- confirm_sell refuses a confirmation made for another plan revision.
-env.draw({ "Sell 2 talismans##BulkSellAll" })
+env.draw({ "Sell 5 talismans##BulkSellAll" })
+T.state.confirm.ack_unique = true
 T.state.scan.revision = T.state.scan.revision + 1
 T.actions.confirm_sell()
 eq(T.state.job, nil, "no sale started for a stale revision")
@@ -265,20 +378,24 @@ eq(T.state.notice, LIST_CHANGED, "stale revision notice")
 rescan()
 
 -- A key that is not a planned sale stops the run before anything is sold.
-env.draw({ "Sell 2 talismans##BulkSellAll" })
+env.draw({ "Sell 5 talismans##BulkSellAll" })
 T.state.confirm.keys = { 2, 9 }
+env.draw(nil, { [ACK_UNIQUE] = true })
 env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
 env.draw()
 eq(at(2).values.category, 2, "valid key not sold when another key is invalid")
 eq(at(9).values.category, 2, "kept talisman not sold")
 eq(basic.values.money, 1000000, "no zenny change")
-assert(env.has_text("Stopped: The sale list does not match the plan"), "mismatch reported")
+assert(env.has("Stopped: The sale list does not match the plan"), "mismatch reported")
+eq(T.state.unique_ack.count, 3, "the tick was given for 3 unique talismans")
+T.state.unique_ack = nil   -- start the tick tests below from scratch
 
--- Sell one talisman as a test.
+-- "Sell just 1 (test)" sells the cheapest planned sale of the list shown.
 env.draw({ "Sell just 1 (test)##BulkSellOne" })
 env.draw()
-assert(env.has_text("Sell 1 talisman %(R5  Skill1 1  W1%) for 1,500 z%?"), "single confirmation")
+assert(env.has("Sell 1 talisman (R5  Skill1 1  W1) for 1,500 z?"), "cheapest first, lowest box on a tie")
+assert(env.buttons["Yes, sell##BulkSellConfirm"], "a duplicate needs no tick")
 env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
 env.draw()
@@ -286,63 +403,235 @@ eq(at(2).values.category, -1, "box 2 cleared")
 eq(basic.values.money, 1001500, "zenny credited")
 eq(calls.remove_accessory, 3, "decorations removed from every slot like the game does")
 eq(calls.update_myset, 1, "loadouts updated after the sale")
-assert(env.has_text("Sold 1 talismans for 1,500 z%."), "sale result")
-local receipt_path, receipt
-for path, data in pairs(env.files) do
-    if path:find("^BulkSell/receipts/sold_") and data.sold == 1 then receipt_path, receipt = path, data end
-end
-assert(receipt, "receipt written")
+assert(env.has("Sold 1 talismans for 1,500 z."), "sale result")
+local receipt = receipts()[#receipts()]
+eq(receipt.sold, 1, "receipt count")
 eq(receipt.talismans[1].box, 2, "receipt box")
 eq(receipt.talismans[1].price, 1500, "receipt price")
 eq(receipt.talismans[1].price_source, "game", "receipt price source")
+eq(receipt.talismans[1].why, "duplicate", "old why field")
+eq(receipt.talismans[1].class, "safe", "class")
+eq(receipt.talismans[1].detail, "Same as #1 (kept)", "detail text")
+eq(receipt.talismans[1].kept_instead, 1, "kept instead")
+eq(receipt.talismans[1].lost, "none", "nothing lost")
 eq(receipt.skipped, "none", "receipt without skips")
 eq(receipt.money_before, 1000000, "receipt money before")
 eq(receipt.money_after, 1001500, "receipt money after")
-assert(env.has_text("Receipt: reframework/data/" .. receipt_path), "receipt path shown")
-assert(env.has_text("Sell 1, keep 5"), "rescanned after selling")
+eq(receipt.trigger, "manual", "trigger")
+eq(receipt.rules.mode, "best", "rules mode")
+eq(receipt.rules.best_n, 1, "rules N")
+eq(receipt.rules.max_rarity, 8, "rules rarity")
+eq(receipt.rules.always_keep, "none", "rules Always keep")
+eq(receipt.acknowledged.unique, false, "no unique tick")
+eq(receipt.picks.sell, 0, "no picks")
+eq(type(receipt.plan_revision), "number", "plan revision")
+frames(2)
+env.draw()
+assert(env.has("Sell 4 · keep 6"), "rescanned after selling")
 
--- The rarity rule would sell the only Skill9: the plan and the confirmation say so.
-env.draw(nil, { ["Also sell by rarity"] = true })
+-- Unique sales need the tick; it is remembered for these rules until there are more.
+find("#13")
+assert(env.has("1 shown (1 to sell, 3,000 z)"), "find by box")
+env.draw({ "Sell the 1 shown##BulkSellShown" })
+env.draw()
+assert(env.has("1 are unique"), "unique line for one")
+assert(not env.buttons["Yes, sell##BulkSellConfirm"], "tick needed")
+env.draw(nil, { [ACK_UNIQUE] = true })
+env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
+eq(at(13).values.category, -1, "unique talisman sold")
+receipt = receipts()[#receipts()]
+eq(receipt.talismans[1].class, "unique", "unique class")
+eq(receipt.talismans[1].kept_for[1], 7, "kept for Skill7")
+eq(receipt.talismans[1].kept_for[2], 9, "kept for Skill9")
+eq(receipt.talismans[1].kept_for_total, 2, "kept for total")
+eq(receipt.talismans[1].rank, 2, "rank")
+eq(receipt.acknowledged.unique, true, "tick recorded")
+frames(2)
+find("")
+env.draw({ "Sell 3 talismans##BulkSellAll" })
 env.draw()
-assert(env.has_text("Sell 2, keep 4"), "rarity rule sells unprotected R5")
-assert(env.has_text("rarity rule 2"), "rule reason counted")
-assert(env.has_text("lowers your best level of 1 skills"), "plan warns about a lost skill")
-env.draw({ "Sell 2 talismans##BulkSellAll" })
+assert(env.has("2 are unique"), "two unique")
+assert(not env.buttons["Yes, sell##BulkSellConfirm"], "more unique talismans than acknowledged: ask again")
+env.draw({ "Cancel##BulkSellCancel" })
+find("#10")
+env.draw({ "Sell the 1 shown##BulkSellShown" })
 env.draw()
-assert(env.has_text("Removes your last Skill9 %(#9%)"), "red line in the confirmation")
+assert(env.buttons["Yes, sell##BulkSellConfirm"], "one unique for the same rules: remembered")
+env.draw({ "Cancel##BulkSellCancel" })
+env.draw(nil, { [RARITY] = 7 })
+frames()
+env.draw({ "Sell the 1 shown##BulkSellShown" })
+env.draw()
+assert(not env.buttons["Yes, sell##BulkSellConfirm"], "other rules: ask again")
 env.draw({ "Cancel##BulkSellCancel" })
 
--- Kept skills exempt talismans from the rarity rule.
-env.draw({ "Add kept skill##BulkSellKeepAdd" }, { ["Skill##BulkSellKeepSkill"] = 4 })
+-- A unique sale is skipped when a talisman kept for its skills changed.
+find("#12")
+env.draw({ "Sell the 1 shown##BulkSellShown" })
+env.draw(nil, { [ACK_UNIQUE] = true })
+set_packed(11, { 2011, 0, 0, 0 })
+env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
 env.draw()
-assert(env.has_text("Skill9 1%+"), "kept skill listed")
-assert(env.has_text("Sell 1, keep 5"), "kept skill exempts the Skill9 talisman")
-assert(not env.has_text("lowers your best level"), "no lost skill any more")
-local saved = assert(env.files["BulkSell/config.json"], "settings saved")
-eq(saved.rule_enabled, true, "saved rule")
-eq(saved.keep_skills["9"], 1, "saved kept skill")
-env.draw({ "Remove##BulkSellKeep9" })
+eq(at(12).values.category, 2, "unique talisman kept when its certificate changed")
+assert(env.has("1 were kept after a last check"), "skip reported")
+receipt = receipts()[#receipts()]
+eq(receipt.skipped[1].reason, "a talisman kept for its skills changed (#11)", "skip reason")
+set_packed(11, { 3011, 0, 0, 0 })
+frames(2)
+env.draw()
+
+-- A row's Sell box makes a pick; it is saved with the fingerprint and survives a rescan.
+env.draw(nil, { ["Show##BulkSellFilter"] = 3 })   -- All
+find("#10")
+env.draw(nil, { ["##BulkSellPick10"] = false })
 frames()
 env.draw()
-assert(env.has_text("Sell 2, keep 4"), "kept skill removed")
-env.draw(nil, { ["Also sell by rarity"] = false })
+assert(env.has("Keep · your pick"), "Keep pick")
+assert(env.has("10*"), "pick marker")
+env.callbacks.config_save()
+local picks_file = env.files["BulkSell/picks/slot-0-a.json"]
+assert(picks_file, "picks file written")
+eq(picks_file.picks["10"].action, "keep", "pick saved")
+eq(picks_file.picks["10"].fp, "190:1009:1011:0:0", "pick fingerprint")
+eq(picks_file.play_start, "638763618528919137", "picks file character")
+rescan()
+assert(env.has("Keep · your pick"), "pick survives a rescan")
+set_packed(10, { 1009, 2011, 0, 0 })
+rescan()
+assert(env.has("1 picks removed: #10 changed or gone"), "pick dropped when the talisman changed")
+set_packed(10, { 1009, 1011, 0, 0 })
+rescan()
+
+-- Protected rows ignore their (disabled) box and explain why.
+find("#3")
+env.hover = true
+env.draw(nil, { ["##BulkSellPick3"] = true })
+env.hover = false
+eq(T.state.picks.entries[3], nil, "no pick on a protected talisman")
+local protected_tooltip = false
+for _, text in ipairs(env.tooltips) do
+    if text == "RNG Charm Crafting bonus" then protected_tooltip = true end
+end
+assert(protected_tooltip, "tooltip on the protected row")
+
+-- Mark shown with Find, then Undo.
+find("Skill11")
+assert(env.has("3 shown (2 to sell, 7,500 z)"), "find by skill")
+env.draw({ "Keep##BulkSellMarkkeep" })
 frames()
 env.draw()
-assert(env.has_text("Sell 1, keep 5"), "rule off again")
+assert(env.has("3 shown (0 to sell, 0 z)"), "marked Keep")
+eq(T.state.picks.entries[11].action, "keep", "the kept one gets a Keep pick too")
+env.draw({ "Undo##BulkSellUndo" })
+frames()
+env.draw()
+assert(env.has("3 shown (2 to sell, 7,500 z)"), "undone")
+
+-- A pick made after "Sell" withdraws the confirmation.
+find("")
+env.draw({ "Sell 3 talismans##BulkSellAll" })
+find("#4")
+env.draw(nil, { ["##BulkSellPick4"] = false })
+eq(T.state.confirm, nil, "confirmation withdrawn by a pick")
+T.actions.confirm_sell()
+eq(T.state.job, nil, "nothing sold")
+env.draw(nil, { ["##BulkSellPick4"] = false })
+frames()
+
+-- A Sell pick on the only holder of a skill level needs the loss tick.
+find("#9")
+env.draw(nil, { ["##BulkSellPick9"] = true })
+frames()
+env.draw()
+assert(env.has("Sell · your pick"), "Sell pick")
+assert(env.has("Your pick · LAST Skill9 2"), "loss in the Why column")
+assert(env.has("1 planned sales lower a skill or remove a slot shape"), "summary warning")
+env.draw({ "Sell the 1 shown##BulkSellShown" })
+env.draw()
+assert(env.has("This sale removes:"), "loss block")
+assert(env.has("Skill9 2 (best left 1) #9"), "loss line")
+assert(not env.buttons["Yes, sell##BulkSellConfirm"], "loss tick needed")
+env.draw(nil, { [ACK_LOSS] = true })
+env.draw({ "Yes, sell##BulkSellConfirm" })
+frames()
+eq(at(9).values.category, -1, "picked talisman sold")
+eq(T.state.picks.entries[9], nil, "pick removed after the sale")
+receipt = receipts()[#receipts()]
+eq(receipt.talismans[1].class, "pick", "pick class")
+eq(receipt.talismans[1].lost, "Skill9 2", "lost text")
+eq(receipt.acknowledged.losses, true, "loss tick recorded")
+eq(receipt.picks.sell, 1, "one Sell pick")
+frames(2)
+
+-- Closing the menu stops a sale after the current talisman; it is rescanned later.
+find("")
+env.draw(nil, { [RARITY] = 8 })
+frames()
+env.draw()
+local planned = T.state.scan.summary.sell
+eq(planned >= 2, true, "several sales planned")
+env.draw({ "Sell " .. planned .. " talismans##BulkSellAll" })
+env.draw(nil, { [ACK_UNIQUE] = true })
+after_money = function() env.drawing_ui = false end
+env.draw({ "Yes, sell##BulkSellConfirm" })
+frames(1)
+after_money = nil
+receipt = receipts()[#receipts()]
+eq(receipt.sold, 1, "only one sold")
+eq(receipt.stopped, "the REFramework menu was closed.", "stop reason")
+eq(receipt.money_after, "unknown", "no game call after the menu closed")
+frames(5)
+env.drawing_ui = true
+frames(2)
+env.draw()
+eq(T.state.scan.summary.sell, planned - 1, "rescanned when the menu opened again")
+eq(at(4).values.category, -1, "the first planned sale (box 4) was the one sold")
+restore_box4()
+
+-- Picks belong to a save slot.
+find("#12")
+env.draw(nil, { ["##BulkSellPick12"] = false })
+frames()
+env.callbacks.config_save()
+save_manager.values.CurrentUserDataIndex = 1
+rescan()
+eq(T.state.picks.slot, 1, "slot 1 picks")
+eq(T.state.picks.entries[12], nil, "slot 0 picks not used in slot 1")
+save_manager.values.CurrentUserDataIndex = 0
+rescan()
+eq(T.state.picks.entries[12].action, "keep", "slot 0 picks back")
+
+-- A picks file that cannot be read pauses selling until the player continues.
+env.put_raw("BulkSell/picks/slot-0-a.json", "garbage")
+env.put_raw("BulkSell/picks/slot-0-b.json", "garbage")
+save_manager.values.CurrentUserDataIndex = 1
+rescan()
+save_manager.values.CurrentUserDataIndex = 0
+rescan()
+assert(env.has("Your saved Sell/Keep ticks could not be read"), "paused")
+assert(not env.buttons["Sell " .. T.state.scan.summary.sell .. " talismans##BulkSellAll"], "no Sell button while paused")
+env.draw({ "Continue without my picks##BulkSellNoPicks" })
+frames()
+env.draw()
+assert(not env.has("could not be read"), "continued")
+find("")
 
 -- A sale price that disagrees with the value table is never paid.
+env.draw(nil, { [KEEP] = 2 })
+frames()
 set_box_override[4] = nil
 price_override[4] = 9999
 rescan()
+local money = basic.values.money
 env.draw({ "Sell 1 talismans##BulkSellAll" })
 env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
 env.draw()
-assert(env.has_text("Stopped: The game's sale price does not match"), "price mismatch stops")
+assert(env.has("Stopped: The game's sale price does not match"), "price mismatch stops")
 eq(at(4).values.category, 2, "mismatched talisman not sold")
-eq(basic.values.money, 1001500, "no zenny change on a price mismatch")
+eq(basic.values.money, money, "no zenny change on a price mismatch")
 price_override[4] = nil
 rescan()
 
@@ -353,9 +642,11 @@ env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
 env.draw()
 eq(at(4).values.category, 2, "favorite not sold")
-assert(env.has_text("Sold 0 talismans for 0 z%."), "nothing sold")
-assert(env.has_text("1 were kept after a last check"), "skip reported")
-assert(env.has_text("Nothing to sell with the current rules"), "rescan protects the favorite")
+assert(env.has("Sold 0 talismans for 0 z."), "nothing sold")
+assert(env.has("1 were kept after a last check"), "skip reported")
+frames(2)
+env.draw()
+assert(env.has("Nothing more to sell: every talisman is unique."), "rescan protects the favorite")
 
 -- A sale whose zenny does not arrive stops the run.
 at(4).values.FreeVal4 = 0
@@ -365,46 +656,42 @@ env.draw({ "Sell 1 talismans##BulkSellAll" })
 env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
 env.draw()
-assert(env.has_text("Stopped: Zenny changed by 0 instead of 1500"), "zenny mismatch stops")
-
--- Confirmations can be cancelled.
+assert(env.has("Stopped: Zenny changed by 0 instead of 1500"), "zenny mismatch stops")
 money_gain = 1
-at(4).values.category = 2
-at(4).values.Category_Gender = 21
-at(4).values.FreeVal0 = 189
-at(4).values.FreeVal1 = 1
-at(4).values.BowgunCustomizeId = boxed("System.Int16", { 2005, 0, 0, 1000 })
+
+-- Confirmations can be cancelled, and expire.
+restore_box4()
 rescan()
 env.draw({ "Sell 1 talismans##BulkSellAll" })
 env.draw({ "Cancel##BulkSellCancel" })
 env.draw()
-assert(not env.has_text("This cannot be undone"), "cancelled confirmation hidden")
+assert(not env.has("This cannot be undone"), "cancelled confirmation hidden")
+env.draw({ "Sell 1 talismans##BulkSellAll" })
+env.advance(30)
+frames(1)
+env.draw()
+assert(not env.has("This cannot be undone"), "expired confirmation hidden")
 
 -- A covered talisman is kept when the talisman that covers it changed after the scan.
-at(3).values.BowgunCustomizeId = boxed("System.Int16", { 1009, 0, 0, 0 })
 env.draw({ "Sell 1 talismans##BulkSellAll" })
+set_packed(3, { 1009, 0, 0, 0 })
 env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
 env.draw()
 eq(at(4).values.category, 2, "covered talisman kept when its keeper is gone")
-assert(env.has_text("1 were kept after a last check"), "keeper check reported")
-local last_receipt
-for _, data in pairs(env.files) do
-    if type(data) == "table" and data.sold == 0 and type(data.skipped) == "table" then last_receipt = data end
-end
-assert(last_receipt, "receipt with a skip")
-eq(last_receipt.skipped[#last_receipt.skipped].reason, "the talisman kept instead is gone", "skip reason in receipt")
-at(3).values.BowgunCustomizeId = boxed("System.Int16", { 3005, 0, 0, 2110 })
+receipt = receipts()[#receipts()]
+eq(receipt.skipped[#receipt.skipped].reason, "the talisman kept instead is gone", "skip reason in receipt")
+set_packed(3, { 3005, 0, 0, 2110 })
 
 -- An unreadable RNG Charm Crafting sidecar turns selling off until it is fixed.
 env.put_raw(SIDECAR_B, "garbage")
 rescan()
 assert(env.has_text("RNG Charm Crafting file TalismanCrafting/special%-bonuses%-slot%-0%-b%.json could not be read"),
     "corrupt sidecar blocks selling")
-assert(not env.has_text("Sell 1 talismans"), "no sell button while blocked")
+assert(not env.buttons["Sell 1 talismans##BulkSellAll"], "no sell button while blocked")
 env.raw[SIDECAR_B] = nil
 rescan()
-assert(not env.has_text("could not be read"), "unblocked once the file is gone")
+assert(not env.has("could not be read"), "unblocked once the file is gone")
 
 eq(env.load_file_calls, 0, "no json.load_file, so no '[JSON] Failed to load file' log lines")
 

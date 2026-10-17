@@ -543,8 +543,10 @@ function analysis.plan(charms, options)
         return found
     end
 
-    -- Stage 3: verdicts of every pool entry that is not fixed, for one mode and N, plus the floor.
-    local function decide(mode_x, n_x)
+    -- Stage 3: verdicts of every pool entry that is not fixed, for one mode and N (and
+    -- optionally another rarity limit), plus the floor.
+    local function decide(mode_x, n_x, rarity_x)
+        local limit = rarity_x or max_rarity
         local out = {}
         if mode_x == "manual" then
             for _, e in ipairs(pool) do
@@ -586,7 +588,7 @@ function analysis.plan(charms, options)
         for _, e in ipairs(pool) do
             if fixed[e.key] or floor[e.key] or not best then
                 stay[#stay + 1] = e
-            elseif e.rarity > max_rarity then
+            elseif e.rarity > limit then
                 state[e.key] = "rarity"
                 stay[#stay + 1] = e
             else
@@ -779,8 +781,9 @@ function analysis.plan(charms, options)
 
     -- Stage 7: exact counts for every entry of the Keep combo, from the same decide().
     if options.preview ~= false then
-        local function count(mode_x, n_x)
-            local o = (mode_x == mode and (mode_x ~= "best" or n_x == best_n)) and out or decide(mode_x, n_x)
+        local function count(mode_x, n_x, rarity_x)
+            local same = mode_x == mode and (mode_x ~= "best" or n_x == best_n) and rarity_x == nil
+            local o = same and out or decide(mode_x, n_x, rarity_x)
             local sell, zenny = 0, 0
             for _, e in ipairs(entries) do
                 local v = fixed[e.key] or o[e.key]
@@ -795,6 +798,8 @@ function analysis.plan(charms, options)
         info.preview = { manual = count("manual"), covered = count("covered"), best = {} }
         for _, n in ipairs(analysis.PREVIEW_N) do info.preview.best[n] = count("best", n) end
         if mode == "best" and not info.preview.best[best_n] then info.preview.best[best_n] = count("best", best_n) end
+        -- What the same N would sell without a rarity limit (the hint under the slider).
+        if mode == "best" and max_rarity < 8 then info.preview.unlimited = count("best", best_n, 8) end
     end
     return verdicts, info
 end

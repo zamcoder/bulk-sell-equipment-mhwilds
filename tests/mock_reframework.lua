@@ -17,9 +17,15 @@ M.types = {}
 local next_address = 0x1000
 
 -- Every call into fake game objects is counted, so tests can prove that nothing
--- touches the game (for example while the REFramework menu is closed).
+-- touches the game (for example while the REFramework menu is closed). With
+-- env.guard_draw set, any game call while env.draw runs a UI frame is an error: the
+-- mod's UI must only read Lua state (the old dev probe does not follow that rule).
 M.game_calls = 0
-local function game_call() M.game_calls = M.game_calls + 1 end
+M.in_draw = false
+local function game_call()
+    if M.in_draw then error("game call while drawing the UI", 3) end
+    M.game_calls = M.game_calls + 1
+end
 
 function M.new_type(name, spec)
     spec = spec or {}
@@ -131,6 +137,10 @@ end
 M.new_type("System.ValueType", { parent = "System.Object" })
 M.add_method(M.types["System.String"], "ToString", "System.String", {}, function(self) return self.text end)
 
+local function eq_depth(env)
+    if env.disabled ~= 0 then error("begin_disabled / end_disabled not balanced", 3) end
+end
+
 -- Installs fake REFramework globals and returns the recorder used by tests.
 function M.install()
     local env = {
@@ -138,6 +148,10 @@ function M.install()
         callbacks = {}, entries = {}, singletons = {}, logs = {}, storage = {},
         drawing_ui = true, load_file_calls = 0,
         raw = {}, parsed = {},   -- files as text for fs.read, and what json.load_string makes of a text
+        disabled = 0,            -- begin_disabled depth: buttons and checkboxes do nothing inside
+        hover = false,           -- what is_item_hovered answers
+        tooltips = {},
+        buttons = {}, combos = {},   -- what the last env.draw drew
     }
     fs = nil
 
@@ -145,6 +159,7 @@ function M.install()
         local new_value = env.inputs[label]
         if new_value ~= nil then
             env.inputs[label] = nil
+            if env.disabled > 0 then return false, value end
             return true, new_value
         end
         return false, value
@@ -186,15 +201,24 @@ function M.install()
         end,
         begin_table = function() return true end,
         button = function(label)
+            env.buttons[label] = true
             if env.pressed[label] then
                 env.pressed[label] = nil
-                return true
+                return env.disabled == 0
             end
             return false
         end,
+        begin_disabled = function() env.disabled = env.disabled + 1 end,
+        end_disabled = function() env.disabled = env.disabled - 1 end,
+        collapsing_header = function() return true end,
+        is_item_hovered = function() return env.hover end,
+        set_tooltip = function(text) env.tooltips[#env.tooltips + 1] = text end,
         checkbox = input,
         slider_int = input,
-        combo = input,
+        combo = function(label, value, items)
+            env.combos[label] = items
+            return input(label, value)
+        end,
         input_text = input,
         text = function(text) env.texts[#env.texts + 1] = text end,
         text_colored = function(text) env.texts[#env.texts + 1] = text end,
@@ -255,10 +279,29 @@ function M.install()
     function env.draw(pressed, inputs)
         for _, label in ipairs(pressed or {}) do env.pressed[label] = true end
         for label, value in pairs(inputs or {}) do env.inputs[label] = value end
-        env.texts = {}
-        env.callbacks.draw_ui()
+        env.texts, env.tooltips, env.buttons, env.combos = {}, {}, {}, {}
+        M.in_draw = env.guard_draw == true
+        local ok, err = pcall(env.callbacks.draw_ui)
+        M.in_draw = false
+        if not ok then error(err, 2) end
+        eq_depth(env)
         for label in pairs(env.pressed) do error("button not drawn: " .. label, 2) end
         for label in pairs(env.inputs) do error("input not drawn: " .. label, 2) end
+    end
+
+    -- A fake os.clock: env.advance(seconds) moves it, so delays and timeouts can be tested.
+    function env.use_fake_clock()
+        env.now = 1000
+        os.clock = function() return env.now end
+        function env.advance(seconds) env.now = env.now + seconds end
+    end
+
+    -- Plain-text search (no Lua patterns).
+    function env.has(text)
+        for _, line in ipairs(env.texts) do
+            if tostring(line):find(text, 1, true) then return true end
+        end
+        return false
     end
 
     function env.has_text(pattern)

@@ -383,6 +383,10 @@ test("the preview equals separate plans", function()
     end
     eq(info.preview.covered.sell, support.sell_count(plan(box, { mode = "covered" })), "covered")
     eq(info.preview.manual.sell, 0, "manual")
+    eq(info.preview.unlimited, nil, "no rarity limit, no extra count")
+    local _, limited = analysis.plan(box, { mode = "best", best_n = 2, max_rarity = 6 })
+    eq(limited.preview.unlimited.sell, support.sell_count(plan(box, { mode = "best", best_n = 2, max_rarity = 8 })),
+        "what the same N sells up to R8")
 end)
 
 test("planning what stays sells nothing", function()
