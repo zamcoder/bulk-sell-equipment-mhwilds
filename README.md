@@ -14,6 +14,34 @@ Bulk Sell asks of every appraised talisman: do you still need it?
 - **Your control:** tick or untick any row; your choice beats the rules. Nothing is sold until you confirm.
 - **The promise:** the rules never lower your best level of any skill, and never remove the last talisman that can hold a slot shape. Only your own ticks can, and the confirmation names exactly what you would lose.
 
+## How "Keep the best N per skill" works
+
+The mod goes through these steps, in this order:
+
+1. **Protected talismans stay.** Equipped, in a loadout, favorite, with decorations, or with an RNG Charm Crafting bonus. Your own ticks come next: a ticked row is sold, an unticked one is kept, whatever the rules say.
+2. **Duplicates and covered talismans go.** A talisman is *covered* when a talisman you keep has every one of its skills at the same or a higher level, and slots that can hold everything its slots can (a size-3 slot holds a size-2 decoration; weapon and armor slots are compared separately). Of identical copies one stays: a protected one first, then your Keep tick, then the cheaper one, then the lowest box number.
+3. **Every skill gets a ranking.** All talismans that are not covered and have the skill are ordered:
+   1. higher level of that skill;
+   2. bigger slots in total (A3 counts 3, A2 A1 counts 3, A1 counts 1);
+   3. more slots;
+   4. more weapon slots;
+   5. stronger other skills, where each skill level counts against the best level of that skill in your box (Ambush 2 of a box best of 2 counts as much as Attack Boost 3 of a box best of 3);
+   6. lower rarity (the cheaper talisman stays);
+   7. a fixed order by the talisman's content, never by box position.
+
+   **The top N of every skill stay.**
+4. **Every slot shape gets a ranking too.** For each slot layout in your box (for example A3, A2 A1 or W1 A1 A1), the talismans whose slots can hold it are ordered by the strength of all their skills, then by their slots. **The top N of every slot shape stay**, so your best A3 talismans are never all sold for their skills.
+5. **The rest is sold if it is unique and within your rarity limit.** A talisman that is in nobody's top N, for none of its skills and not for its slot shape, is sold. Exceptions: its rarity is above your limit, or it has an **Always keep** skill at the level you chose.
+
+What this means in practice:
+
+- **Your best level of every skill stays**, because the number 1 of each ranking always stays. The same goes for slot shapes.
+- **Rare skills stay.** If only 2 talismans have a skill, both are inside any top 3. (A covered one is still sold, but then the talisman that covers it keeps that skill at the same or a higher level.)
+- **A good talisman can still be sold** when better ones exist for every one of its skills. For example, an R7 Attack Boost 3 / Evade Window 2 / Item Prolonger 1 with an A2 slot is sold under best 3 when 3 better talismans exist for each of those skills and for the A2 shape. Its Why text shows how close it came: "Not in your best 3 · closest Item Prolonger #10 of 12".
+- **Kept talismans show why they stay:** "Ambush #1 of 21" means it is the best Ambush talisman you have; "Slot shape A3 #2 of 18" means it is your second-best A3 talisman.
+- **A smaller N sells more.** Best 10 is careful, best 1 keeps only the single best talisman per skill and slot shape. Selling in steps (best 10, then 5, then 3) lets you look at the list each time.
+- **Nothing changes until you confirm**, and an independent check re-derives every sale from the result; a sale that does not pass is kept instead.
+
 ## Features
 
 - **Scans the whole Equipment Box** on the game thread. The work is spread over frames, so a full box of 2,400 slots scans without stutter.
