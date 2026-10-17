@@ -12,7 +12,7 @@ Bulk Sell asks of every appraised talisman: do you still need it?
 - **Default:** only duplicates are sold, plus talismans that a talisman you keep matches or beats on every skill and slot.
 - **More space:** choose **Keep the best 3 per skill** (or 10, 5, 2, 1). For every skill and for every slot shape (for example a size-3 slot), your 3 best talismans stay. Every other unique talisman up to your rarity limit is sold.
 - **Your control:** tick or untick any row; your choice beats the rules. Nothing is sold until you confirm.
-- **The promise:** the rules never lower your best level of any skill, and never remove the last talisman that can hold a slot shape. Only your own ticks can, and the confirmation names exactly what you would lose.
+- **The promise:** the rules never lower your best level of any skill, and never remove the last talisman that can hold a slot shape. Only your own ticks and Don't care settings can, and the confirmation names exactly what you would lose.
 
 ## How "Keep the best N per skill" works
 
@@ -31,7 +31,16 @@ The mod goes through these steps, in this order:
 
    **The top N of every skill stay.**
 4. **Every slot shape gets a ranking too.** For each slot layout in your box (for example A3, A2 A1 or W1 A1 A1), the talismans whose slots can hold it are ordered by the strength of all their skills, then by their slots. **The top N of every slot shape stay**, so your best A3 talismans are never all sold for their skills.
-5. **The rest is sold if it is unique and within your rarity limit.** A talisman that is in nobody's top N, for none of its skills and not for its slot shape, is sold. Exceptions: its rarity is above your limit, or it has an **Always keep** skill at the level you chose.
+5. **The rest is sold if it is unique and within your rarity limit.** A talisman that is in nobody's top N, for none of its skills and not for its slot shape, is sold. Exceptions: its rarity is above your limit, or it has a skill set to **Keep all** at the level you chose.
+
+**Per skill** (the **Skills** panel), you can change step 3 and 5 for one skill:
+
+| Setting | What it does |
+|---|---|
+| Default | The Keep option decides (best N for this skill too) |
+| Best 1 / 2 / 3 / 5 / 10 | This skill keeps its own number of talismans, for example Best 10 for Attack Boost while everything else keeps 3 |
+| Keep all, Keep all Lv2+, ... | No talisman with this skill (at that level or higher) is sold as unique. Duplicates and covered talismans with it are still sold |
+| Don't care | The skill is left out of every comparison: it gets no places, and a talisman that only differs by it counts as covered or duplicate. If that removes your best level of the skill, the summary says so in yellow and the confirmation lists it in red |
 
 ### Example: one skill, ranked
 
@@ -72,10 +81,14 @@ What this means in practice:
 - **One Keep option, with exact numbers.** Each choice shows how many talismans it would sell and for how much:
   - *Keep everything (sell only what I tick)*
   - *Keep every unique talisman*: duplicates and covered talismans only (the default)
-  - *Keep the best 10 / 5 / 3 / 2 / 1 per skill*, with a rarity limit ("sell unique talismans only up to rarity 7", for example) and an **Always keep** list of skills.
+  - *Keep the best 10 / 5 / 3 / 2 / 1 per skill*, with a rarity limit ("sell unique talismans only up to rarity 7", for example).
+- **Skills panel:** per skill Default, its own Best N, Keep all (from a level), or Don't care. It shows how many talismans have each skill, the best level in your box, and what stays after the plan (red when the best level would go down). **Find** plus "Set the N shown to", Undo and Reset all.
 - **Ticks per row.** The Sell box of a row overrides the rules for that talisman, and a `*` marks it. Ticks are saved per save slot. **Mark shown** ticks or unticks every row the filter shows, with **Undo**.
 - **Shows every talisman before anything is sold:** its price, the verdict and why. For example, "Same as #1032 (kept)", "Covered by #875 R8 Critical Eye 3, Flayer 1", "Not in your best 3 · closest Item Prolonger #10 of 12" or "Ambush #1 of 21".
-- **Filters:** To sell, To keep, All, Your picks, Unique sales, plus **Find** (a skill name or `#box`) and rarity checkboxes.
+- **Filters:** To sell, To keep, All, Your picks, Unique sales, Changed by last edit, Last of their kind (the only holder of a skill's best level or of a slot shape), plus **Find** (a skill name or `#box`) and rarity checkboxes. A "Last change" line says what your last edit or rescan changed, and the scan line counts new talismans.
+- **Stars:** "Star the N kept", "Star my Keep picks" and "Remove stars Bulk Sell added" use the game's own favorite lock, so what you keep is safe in the game's menus too. Bulk Sell remembers which stars it added and never removes yours.
+- **Export:** "Copy for mhwilds.wiki-db.com" puts your talismans (all, what stays, or only the sales) on the clipboard in the format of the site's Talisman tab, and "Save CSV" writes a spreadsheet. Names can be in the game's language or in English, Japanese, Korean or Chinese.
+- **Melding Pot comparison:** the summary also shows how many Melding Pot points the planned sales would be worth instead of zenny.
 - **Pays the game's own price:** 1,500 / 3,000 / 4,500 / 8,000 z for rarity 5 / 6 / 7 / 8.
 - **Writes a JSON receipt** for every sale run, with the rules used and why each talisman was sold.
 
@@ -94,7 +107,7 @@ The mod also checks itself while it sells:
 
 - **A confirmation only sells the list it showed.** If the rules, a tick or the box change before you press "Yes, sell", the confirmation is withdrawn.
 - **Unique talismans need your OK.** When a sale includes talismans with no identical or better copy, the confirmation says so and asks you to tick "I understand that unique talismans are sold". It asks again when the rules change or the sale has more unique talismans than the one you agreed to.
-- **Losses need your OK.** If a sale would lower your best level of a skill or remove the last talisman of a slot shape (only your own ticks can cause that), the confirmation lists it in red and asks you to tick "I accept losing these".
+- **Losses need your OK.** If a sale would lower your best level of a skill or remove the last talisman of a slot shape (only your own ticks or a Don't care setting can cause that), the confirmation lists it in red and asks you to tick "I accept losing these".
 - **The list is made again when the box may have changed.** After you close the REFramework menu, open a full-screen game menu or an equipment list, the window says "Rescanning..." and scans again before you can sell.
 - **The whole list is checked against the plan before the first talisman is sold**, and each box entry is checked again right before it is sold. A talisman that changed since the scan is skipped. So is a duplicate or covered talisman whose kept talisman is gone, and a unique talisman when one of the talismans kept for its skills changed.
 - **Selling waits** while a game menu is open or the game is saving, and **stops** when you close the REFramework menu.
@@ -128,7 +141,7 @@ The game writes sales to disk at its next autosave. If you close the game before
 1. Stand in the field or at camp with no game menu open. Press **Insert** to open REFramework.
 2. Open **Script Generated UI**, then **Bulk Sell Equipment**, then click **Show window**.
 3. Click **Scan Equipment Box**. Scanning only reads your talismans.
-4. Choose a **Keep** option. Each one shows how many talismans it sells. For the *best N* options, set the rarity limit and add skills to **Always keep** if you like.
+4. Choose a **Keep** option. Each one shows how many talismans it sells. For the *best N* options, set the rarity limit, and change single skills in the **Skills** panel if you like.
 5. Review the list. Untick a row to keep that talisman, or tick a kept one to sell it.
 6. Optionally, click **Sell just 1 (test)** first. It sells the cheapest talisman of the rows shown.
 7. Click **Sell N talismans** (or **Sell the N shown** for the filtered rows), tick what the confirmation asks for, then **Yes, sell**.
@@ -150,10 +163,12 @@ The window tells you once which of these happened. Going back to 0.2.x still wor
 
 | File | Contents |
 |---|---|
-| `reframework/data/BulkSell/config.json` | Your Keep option, rarity limit and Always keep skills |
+| `reframework/data/BulkSell/config.json` | Your Keep option, rarity limit and per-skill settings |
 | `reframework/data/BulkSell/config.v1.json` | Your 0.2.x settings, kept once when they were converted |
 | `reframework/data/BulkSell/picks/slot-<n>-a.json`, `-b.json` | Your ticks for save slot `n`: two copies written in turn, so a crash during a write cannot lose them |
 | `reframework/data/BulkSell/receipts/sold_*.json` | One receipt per sale run: each talisman sold, its price and why, the rules and ticks used, plus zenny before and after |
+| `reframework/data/BulkSell/stars/slot-<n>-a.json`, `-b.json` | The stars Bulk Sell added for save slot `n`, so it can remove exactly those |
+| `reframework/data/BulkSell/export/` | Your exports: `wikidb_<language>_<time>.txt` (the same text as on the clipboard) and `talismans_<time>.csv` |
 | `reframework/data/BulkSell/debug/plan_*.json` | Only with **Write debug files** ticked (in the Bulk Sell menu): the whole plan, for bug reports |
 
 ## Compatibility
@@ -169,7 +184,8 @@ The window tells you once which of these happened. Going back to 0.2.x still wor
 
 - **Crafted talismans are left out entirely.** They are never sold, and they are not used as the "kept instead" talisman when comparing.
 - **Decorations you could add are not counted.** A free slot does not count as a skill it could hold. Decoration-aware comparison is planned.
-- **"Best N" ranks talismans by their numbers only:** skill level, then slots, then the other skills. It does not know which skills you care about. Use ticks, the rarity limit and Always keep for that; per-skill settings are planned.
+- **"Best N" ranks talismans by their numbers only:** skill level, then slots, then the other skills. It does not know which skills you care about. Use the Skills panel, the rarity limit and ticks for that.
+- **Importing into mhwilds.wiki-db.com replaces the site's whole talisman list.** Names in another language come from the game's own texts; when one is missing, the game-language name is used and the window says so.
 - **The interface is in English.** Skill names follow the game's language.
 
 ## Uninstall

@@ -21,7 +21,7 @@ local ui = require("BulkSell.ui")
 
 local T = lang.T
 
-local VERSION = "0.3.0"
+local VERSION = "0.3.1"
 local FRAME_BUDGET = 0.004       -- seconds of work per game frame
 local CONFIRM_SECONDS = 20
 local ANALYSE_DELAY = 0.25       -- settings and ticks are applied after this pause

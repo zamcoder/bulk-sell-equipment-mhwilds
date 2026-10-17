@@ -6,9 +6,9 @@ This version sells [b]appraised talismans only[/b] (Unknown / Historical / Secre
 [size=4][b]How it decides[/b][/size]
 [list]
 [*][b]Default[/b]: only duplicates, and talismans that a talisman you keep matches or beats on every skill and slot.
-[*][b]More space[/b]: choose [b]Keep the best 3 per skill[/b] (or 10, 5, 2, 1). For every skill and every slot shape, your 3 best talismans stay; every other unique talisman up to your rarity limit is sold. [b]Always keep[/b] skills are never sold as unique.
+[*][b]More space[/b]: choose [b]Keep the best 3 per skill[/b] (or 10, 5, 2, 1). For every skill and every slot shape, your 3 best talismans stay; every other unique talisman up to your rarity limit is sold. The [b]Skills[/b] panel changes this per skill.
 [*][b]Your control[/b]: tick or untick any row; your choice beats the rules. [b]Mark shown[/b] ticks every row a filter shows, with Undo.
-[*][b]The promise[/b]: the rules never lower your best level of any skill, and never remove the last talisman that can hold a slot shape. Only your own ticks can, and the confirmation names exactly what you lose.
+[*][b]The promise[/b]: the rules never lower your best level of any skill, and never remove the last talisman that can hold a slot shape. Only your own ticks and Don't care settings can, and the confirmation names exactly what you lose.
 [/list]
 [size=4][b]How "Keep the best N per skill" works[/b][/size]
 [list=1]
@@ -16,8 +16,9 @@ This version sells [b]appraised talismans only[/b] (Unknown / Historical / Secre
 [*][b]Duplicates and covered talismans go.[/b] Covered means a talisman you keep has every one of its skills at the same or a higher level, and slots that hold everything its slots can (weapon and armor slots compared separately). Of identical copies the cheaper one stays.
 [*][b]Every skill gets a ranking[/b] of the talismans that have it: higher level of that skill, then bigger slots in total, then more slots, then more weapon slots, then stronger other skills (each counted against the best level of that skill in your box), then the cheaper talisman. [b]The top N of every skill stay.[/b]
 [*][b]Every slot shape gets a ranking too[/b] (A3, A2 A1, W1 A1 A1, ...): the talismans that can hold it, by the strength of all their skills, then their slots. [b]The top N of every slot shape stay.[/b]
-[*][b]The rest is sold[/b] if it is unique and within your rarity limit, unless it has an Always keep skill.
+[*][b]The rest is sold[/b] if it is unique and within your rarity limit, unless it has a skill set to Keep all.
 [/list]
+[b]Per skill[/b] (Skills panel): Default, its own Best 1/2/3/5/10, Keep all (from a level), or Don't care. Don't care leaves the skill out of every comparison; if that would remove your best level of it, the summary warns in yellow and the confirmation lists it in red.
 [b]Example: the 11 talismans with Poison Resistance in a real box, in ranking order[/b]
 [code]
  #  Talisman                                                  Slots     Best 10  Best 5  Best 3
@@ -38,6 +39,13 @@ Level 3 comes before level 2; at the same level, bigger slots win (1 beats 2-4 w
 So the number 1 of every skill and every slot shape always stays: [b]your best level of every skill never goes down[/b], and rare skills (on fewer than N talismans) stay. A good talisman can still be sold when better ones exist for every one of its skills; its Why text shows how close it came, for example "Not in your best 3 · closest Item Prolonger #10 of 12". Kept rows say why they stay: "Ambush #1 of 21", "Slot shape A3 #2 of 18". A smaller N sells more; selling in steps (best 10, then 5, then 3) lets you check the list each time.
 
 Every Keep option shows how many talismans it sells and for how much before you choose it. Every row says why: "Same as #1032 (kept)", "Covered by #875 …", "Not in your best 3 · closest Item Prolonger #10 of 12", "Ambush #1 of 21". You get the game's own price (1,500 / 3,000 / 4,500 / 8,000 z for rarity 5 / 6 / 7 / 8). Every run writes a JSON receipt.
+
+[size=4][b]Tools[/b][/size]
+[list]
+[*][b]Stars[/b]: star every kept talisman (or your Keep picks) with the game's own favorite lock, and remove exactly the stars Bulk Sell added. Your own stars are never touched.
+[*][b]Export[/b]: copy your talismans for [url=https://mhwilds.wiki-db.com/sim/?hl=en]mhwilds.wiki-db.com[/url] (Talisman tab > Import/Export Charms; importing replaces the site's list), or save a CSV. All talismans, what stays, or only the sales; names in the game's language or in English, Japanese, Korean or Chinese.
+[*][b]Melding Pot points[/b] of the planned sales next to their zenny.
+[/list]
 
 [size=4][b]Never sold[/b][/size]
 [list]
@@ -75,13 +83,15 @@ Your settings are converted once (the old file stays as [i]config.v1.json[/i]), 
 [size=4][b]Files[/b][/size]
 Settings: [i]reframework/data/BulkSell/config.json[/i]
 Your ticks: [i]reframework/data/BulkSell/picks/[/i]
+Stars Bulk Sell added: [i]reframework/data/BulkSell/stars/[/i]
+Exports: [i]reframework/data/BulkSell/export/[/i]
 Receipts: [i]reframework/data/BulkSell/receipts/[/i]
 
 [size=4][b]Known limitations[/b][/size]
 [list]
 [*]Crafted talismans are not used when deciding what is covered.
 [*]Decorations you could still slot in are not counted. Decoration-aware comparison is planned.
-[*]"Best N" ranks by skill level and slots only; per-skill settings are planned.
+[*]"Best N" ranks by skill level and slots only; use the Skills panel to say which skills matter to you.
 [*]The interface is in English. Skill names follow your game language.
 [/list]
 
