@@ -5,6 +5,7 @@
 local capacity = require("BulkSell.capacity")
 local explain = require("BulkSell.explain")
 local lang = require("BulkSell.lang")
+local skills = require("BulkSell.skills")
 local T = lang.T
 
 local ui = {}
@@ -24,7 +25,10 @@ local RED = 0xFF4040FF
 local YELLOW = 0xFF40FFFF
 local GREEN = 0xFF60FF60
 local GREY = 0xFFA0A0A0
-local FILTERS = { "filter_to_sell", "filter_to_keep", "filter_all", "filter_picks", "filter_unique" }
+local FILTERS = { "filter_to_sell", "filter_to_keep", "filter_all", "filter_picks", "filter_unique", "filter_changed",
+    "filter_last" }
+local FILTER_CHANGED = 6
+local SKILLS_HEIGHT = 300   -- pixels of the Skills list
 local RARITIES = { 5, 6, 7, 8 }
 local MAX_LOSS_LINES = 8
 local MAX_LOSS_BOXES = 3
@@ -33,7 +37,7 @@ local MAX_LOSS_BOXES = 3
 local view = {
     filter = 1, page = 1, find = "", rarity = { [5] = true, [6] = true, [7] = true, [8] = true },
     rows = nil, rows_key = nil, texts = {}, texts_revision = nil, totals = nil,
-    skill_choice = 1, skill_level = 1,
+    skill_find = "", skill_rows = nil, skill_rows_revision = nil,
 }
 
 local function has(name) return type(imgui[name]) == "function" end
@@ -93,6 +97,8 @@ local function matches(scan, charm)
     if f == 2 and v.action ~= "keep" then return false end
     if f == 4 and v.reason ~= "picked" then return false end
     if f == 5 and not (v.action == "sell" and v.unique) then return false end
+    if f == 6 and not (scan.last_change and scan.last_change.keys[charm.key]) then return false end
+    if f == 7 and not (scan.last_of_kind and scan.last_of_kind[charm.key]) then return false end
     if not view.rarity[charm.rarity] then return false end
     local find = view.find
     if find ~= "" then
@@ -127,10 +133,17 @@ end
 -- Plan-wide counts the summary needs, once per revision.
 local function plan_totals(scan)
     if view.totals and view.totals.revision == scan.revision then return view.totals end
-    local t = { revision = scan.revision, losses = 0, pick_sell = 0, pick_keep = 0 }
+    local t = { revision = scan.revision, losses = 0, dont_care = 0, pick_sell = 0, pick_keep = 0 }
+    local dont_care = {}
     for _, charm in ipairs(scan.charms) do
         local v = scan.verdicts[charm.key]
-        if v.action == "sell" and (v.drops or v.ignored_drops or v.shape_lost) then t.losses = t.losses + 1 end
+        if v.action == "sell" and (v.drops or v.shape_lost) then t.losses = t.losses + 1 end
+        for _, d in ipairs(v.action == "sell" and v.ignored_drops or {}) do
+            if not dont_care[d.id] then
+                dont_care[d.id] = true
+                t.dont_care = t.dont_care + 1
+            end
+        end
         if v.reason == "picked" then
             if v.action == "sell" then t.pick_sell = t.pick_sell + 1 else t.pick_keep = t.pick_keep + 1 end
         end
@@ -162,37 +175,103 @@ local function keep_entries(scan, settings)
     return entries
 end
 
-local function draw_keep_skills(state, actions)
-    local settings = state.settings
-    imgui.text(T("always_keep_title"))
-    local remove
-    local ids = {}
-    for id in pairs(settings.keep_skills) do
-        if id ~= "_format" then ids[#ids + 1] = id end
+-- Skills panel -------------------------------------------------------------------
+
+local function skill_rows(scan, settings)
+    if view.skill_rows_revision ~= scan.revision then
+        view.skill_rows = skills.rows(scan.charms, scan.verdicts, settings, scan.ctx.names)
+        view.skill_rows_revision = scan.revision
     end
-    table.sort(ids, function(a, b) return tonumber(a) < tonumber(b) end)
-    for _, id in ipairs(ids) do
-        imgui.text(string.format("  %s %d+", state.skill_names[tonumber(id)] or T("skill_id", id), settings.keep_skills[id]))
+    return view.skill_rows
+end
+
+local function draw_skill_row(state, actions, row)
+    local pref = skills.pref_of(state.settings, row.id)
+    local ignored = pref.kind == "ignore"
+    imgui.table_next_row()
+    imgui.table_set_column_index(0)
+    if ignored then imgui.text_colored(row.name, GREY) else imgui.text(row.name) end
+    imgui.table_set_column_index(1)
+    imgui.text(tostring(row.count))
+    imgui.table_set_column_index(2)
+    imgui.text(tostring(row.best))
+    imgui.table_set_column_index(3)
+    local choices, current = skills.choices(row.best, pref)
+    local labels = {}
+    for i, choice in ipairs(choices) do labels[i] = skills.label(choice) end
+    local changed, index = imgui.combo("##BulkSellSkillPref" .. row.id, current, labels)
+    if changed and choices[index] and not skills.same(choices[index], pref) then actions.set_skill(row.id, choices[index]) end
+    imgui.table_set_column_index(4)
+    local after = row.kept > 0 and T("after_kept", row.kept, row.kept_best) or T("after_none")
+    if row.loss then
+        imgui.text_colored(after .. (ignored and T("after_dont_care") or ""), RED)
+    elseif ignored then
+        imgui.text_colored(after, GREY)
+    else
+        imgui.text(after)
+    end
+end
+
+local SET_SHOWN = { { "default", { kind = "default" } }, { "keep", { kind = "keep", min = 1 } }, { "ignore", { kind = "ignore" } } }
+local SKILL_COLUMNS = { { "col_skill", COLUMN_STRETCH, 2 }, { "col_on_talismans", COLUMN_FIXED, 90 },
+    { "col_best_level", COLUMN_FIXED, 60 }, { "col_keep", COLUMN_FIXED, 170 }, { "col_after", COLUMN_STRETCH, 2 } }
+
+local function draw_skill_table(state, actions, shown)
+    if not imgui.begin_table("BulkSellSkillsTable", 5, TABLE_FLAGS) then return end
+    local ok, err = pcall(function()
+        for _, column in ipairs(SKILL_COLUMNS) do
+            if not pcall(imgui.table_setup_column, T(column[1]), column[2], column[3]) then imgui.table_setup_column(T(column[1])) end
+        end
+        imgui.table_headers_row()
+        for _, row in ipairs(shown) do draw_skill_row(state, actions, row) end
+    end)
+    imgui.end_table()
+    if not ok then error(err, 0) end
+end
+
+local function draw_skills(state, actions)
+    local scan, settings = state.scan, state.settings
+    local c = skills.counts(settings)
+    local header = T("skills_header", c.keep, c.custom, c.ignore) .. "###BulkSellSkills"
+    if not has("collapsing_header") or not imgui.collapsing_header(header) then return end
+    local pending = state.skills_confirm
+    if pending then
+        local text = pending.reset and T("skills_confirm_reset") or T("skills_confirm_set", #pending.ids, skills.label(pending.pref))
+        say(text, YELLOW)
+        if imgui.button(T("yes") .. "##BulkSellSkillsYes") then actions.confirm_skills() end
         imgui.same_line()
-        if imgui.button(T("remove") .. "##BulkSellKeep" .. id) then remove = id end
+        if imgui.button(T("cancel") .. "##BulkSellSkillsNo") then actions.cancel_skills() end
+        return
     end
-    if remove then
-        settings.keep_skills[remove] = nil
-        actions.analyse()
+    local find_changed, find = imgui.input_text(T("find_skill") .. "##BulkSellSkillFind", view.skill_find)
+    if find_changed then view.skill_find = find or "" end
+    local shown = {}
+    local needle = view.skill_find:lower()
+    for _, row in ipairs(skill_rows(scan, settings)) do
+        if needle == "" or row.name:lower():find(needle, 1, true) then shown[#shown + 1] = row end
     end
-    local options = state.scan.skill_options
-    if not options or #options.names == 0 then return end
-    local _, choice = imgui.combo(T("skill") .. "##BulkSellKeepSkill", view.skill_choice, options.names)
-    view.skill_choice = math.max(1, math.min(choice, #options.names))
-    local _, level = imgui.slider_int(T("min_level") .. "##BulkSellKeepLevel", view.skill_level, 1, 5)
-    view.skill_level = level
-    if imgui.button(T("always_keep_add") .. "##BulkSellKeepAdd") then
-        local key = tostring(options.ids[view.skill_choice])
-        settings.keep_skills[key] = view.skill_level
-        settings.skill_places[key] = nil
-        settings.ignore_skills[key] = nil
-        actions.analyse()
+    -- "Set shown" changes many skills at once, so it needs a Find term first.
+    if needle ~= "" then
+        local ids = {}
+        for i, row in ipairs(shown) do ids[i] = row.id end
+        imgui.text(T("set_shown", #shown))
+        for _, choice in ipairs(SET_SHOWN) do
+            imgui.same_line()
+            if imgui.button(skills.label(choice[2]) .. "##BulkSellSetShown" .. choice[1]) then actions.set_skills(ids, choice[2]) end
+        end
     end
+    if state.skills_undo then
+        if imgui.button(T("undo") .. "##BulkSellSkillsUndo") then actions.undo_skills() end
+        imgui.same_line()
+    end
+    if imgui.button(T("reset_all") .. "##BulkSellSkillsReset") then actions.reset_skills() end
+
+    -- The list scrolls inside a child window when the binding is there.
+    local child = has("begin_child_window") and has("end_child_window") and Vector2f ~= nil
+        and pcall(imgui.begin_child_window, "BulkSellSkillsList", Vector2f.new(0, SKILLS_HEIGHT), true)
+    local ok, err = pcall(draw_skill_table, state, actions, shown)
+    if child then imgui.end_child_window() end
+    if not ok then error(err, 0) end
 end
 
 local function draw_rules(state, actions)
@@ -223,8 +302,8 @@ local function draw_rules(state, actions)
         if settings.max_rarity < 8 and unlimited then
             imgui.text_colored(T("rarity_hint", settings.max_rarity, settings.best_n, unlimited.sell, thousands(unlimited.zenny)), GREY)
         end
-        draw_keep_skills(state, actions)
     end
+    draw_skills(state, actions)
 end
 
 -- Summary and selling -------------------------------------------------------------
@@ -244,8 +323,9 @@ local function drop_line(state, drop)
     for i = 1, math.min(#drop.boxes, MAX_LOSS_BOXES) do shown[i] = "#" .. drop.boxes[i] end
     local boxes = table.concat(shown, ", ")
     if #drop.boxes > MAX_LOSS_BOXES then boxes = boxes .. string.format(" +%d", #drop.boxes - MAX_LOSS_BOXES) end
-    if drop.to == 0 then return T("loss_skill_gone", name, drop.from, boxes) end
-    return T("loss_skill_lower", name, drop.from, drop.to, boxes)
+    local ignored = state.scan and state.scan.options.ignore_skills[drop.id] and T("loss_dont_care") or ""
+    if drop.to == 0 then return T("loss_skill_gone", name, drop.from, boxes) .. ignored end
+    return T("loss_skill_lower", name, drop.from, drop.to, boxes) .. ignored
 end
 
 local function draw_losses(state, confirm)
@@ -354,12 +434,20 @@ local function draw_summary(state)
         totals.pick_sell + totals.pick_keep, totals.pick_sell, totals.pick_keep, reasons.protected or 0))
     if summary.sell > 0 then imgui.text(T("summary_rarity", r[5] or 0, r[6] or 0, r[7] or 0, r[8] or 0)) end
     local settings = scan.settings
-    if totals.losses > 0 then
-        say(T("warn_losses", totals.losses), YELLOW)
+    if totals.losses > 0 then say(T("warn_losses", totals.losses), YELLOW) end
+    if totals.dont_care > 0 then say(T("warn_dont_care", totals.dont_care), YELLOW) end
+    if totals.losses > 0 or totals.dont_care > 0 then
+        -- a loss is listed instead of the promise
     elseif summary.sell > 0 and settings.mode == "best" then
         imgui.text_colored(T("promise_best", settings.best_n), GREEN)
     elseif summary.sell > 0 and settings.mode == "covered" then
         imgui.text_colored(T("promise_covered"), GREEN)
+    end
+    local change = scan.last_change
+    if change and change.count > 0 then
+        say(T("last_change", change.what, change.more, change.fewer))
+        imgui.same_line()
+        if imgui.button(T("show_changed") .. "##BulkSellShowChanged") then view.filter, view.page = FILTER_CHANGED, 1 end
     end
 end
 
@@ -496,6 +584,7 @@ local function draw_body(state, actions)
     local cap = capacity.of(stats.used, stats.slots, 0)
     imgui.same_line()
     local line = T("scanned", scan.time, stats.appraised, stats.protected, stats.used, stats.slots, cap and cap.free or 0)
+    if scan.new_count and scan.new_count > 0 then line = line .. T("new_since_scan", scan.new_count) end
     if cap and cap.level == "critical" then
         imgui.text_colored(line, RED)
     elseif cap and cap.level == "warn" then

@@ -8,10 +8,11 @@ local eq = support.eq
 local runner = support.runner()
 local test = runner.test
 
-local SOURCES = { "BulkSell.lua", "BulkSell/ui.lua", "BulkSell/explain.lua", "BulkSell/picks.lua", "BulkSell/config.lua" }
+local SOURCES = { "BulkSell.lua", "BulkSell/ui.lua", "BulkSell/explain.lua", "BulkSell/picks.lua", "BulkSell/config.lua", "BulkSell/skills.lua" }
 local DYNAMIC = {   -- keys built at run time
     "filter_to_sell", "filter_to_keep", "filter_all", "filter_picks", "filter_unique",
-    "mark_sell", "mark_keep", "mark_auto",
+    "mark_sell", "mark_keep", "mark_auto", "filter_changed", "filter_last",
+    "col_skill", "col_on_talismans", "col_best_level", "col_keep", "col_after",
     "col_sell", "col_box", "col_talisman", "col_slots", "col_price", "col_verdict", "col_why",
     "why_protected_equipped", "why_protected_loadout", "why_protected_favorite", "why_protected_decorations", "why_protected_bonus",
 }

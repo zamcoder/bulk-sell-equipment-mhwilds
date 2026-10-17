@@ -151,7 +151,7 @@ function M.install()
         disabled = 0,            -- begin_disabled depth: buttons and checkboxes do nothing inside
         hover = false,           -- what is_item_hovered answers
         tooltips = {},
-        buttons = {}, combos = {},   -- what the last env.draw drew
+        buttons = {}, combos = {}, headers = {},   -- what the last env.draw drew
     }
     fs = nil
 
@@ -210,7 +210,10 @@ function M.install()
         end,
         begin_disabled = function() env.disabled = env.disabled + 1 end,
         end_disabled = function() env.disabled = env.disabled - 1 end,
-        collapsing_header = function() return true end,
+        collapsing_header = function(label)
+            env.headers[label] = true
+            return true
+        end,
         is_item_hovered = function() return env.hover end,
         set_tooltip = function(text) env.tooltips[#env.tooltips + 1] = text end,
         checkbox = input,
@@ -292,7 +295,7 @@ function M.install()
     function env.draw(pressed, inputs)
         for _, label in ipairs(pressed or {}) do env.pressed[label] = true end
         for label, value in pairs(inputs or {}) do env.inputs[label] = value end
-        env.texts, env.tooltips, env.buttons, env.combos = {}, {}, {}, {}
+        env.texts, env.tooltips, env.buttons, env.combos, env.headers = {}, {}, {}, {}, {}
         M.in_draw = env.guard_draw == true
         local ok, err = pcall(env.callbacks.draw_ui)
         M.in_draw = false

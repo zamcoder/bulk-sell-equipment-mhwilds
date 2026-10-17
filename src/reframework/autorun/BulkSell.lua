@@ -14,6 +14,7 @@ local files = require("BulkSell.files")
 local game = require("BulkSell.game")
 local lang = require("BulkSell.lang")
 local picks = require("BulkSell.picks")
+local skills = require("BulkSell.skills")
 local ui = require("BulkSell.ui")
 
 local T = lang.T
@@ -26,6 +27,7 @@ local PICKS_SAVE_INTERVAL = 5    -- seconds between writes of the picks file
 local RECEIPT_DIR = "BulkSell/receipts/"
 local DEBUG_DIR = "BulkSell/debug/"
 local MAX_KEPT_FOR = 10          -- refs listed per receipt entry
+local SKILLS_CONFIRM = 10        -- "Set shown" on more skills than this asks first
 
 local settings, migration_notice = config.load()
 
@@ -53,6 +55,8 @@ local state = {
     notices = {},         -- messages with an OK button (migration, removed picks)
     picks = nil,          -- picks store of the current save slot
     picks_saved_at = 0,
+    skills_undo = nil,    -- per-skill settings before the last change in the Skills panel
+    skills_confirm = nil, -- a pending "Set shown" on many skills, or "Reset all"
     sale = nil,           -- progress and result of the last sale
     stop_requested = false,
 }
@@ -158,7 +162,8 @@ local function write_debug_dump(scan, options)
     })
 end
 
-local function analyse(charms, stats)
+local function analyse(charms, stats, new_count)
+    local previous = state.scan
     local store = state.picks
     local active, kept, notices = picks.reconcile(store.entries, charms)
     if #notices > 0 then
@@ -192,6 +197,23 @@ local function analyse(charms, stats)
         revision = state.revision,
     }
     scan.ctx = { names = state.skill_names, by_key = by_key, info = info, settings = scan.settings, ignore = options.ignore_skills }
+    if previous then
+        -- What this plan changed against the one before: rule edits, ticks, or a rescan.
+        local changed, keys, more, fewer = analysis.diff(previous.verdicts, verdicts), {}, 0, 0
+        for _, key in ipairs(changed) do
+            keys[key] = true
+            if verdicts[key].action == "sell" then more = more + 1 else fewer = fewer + 1 end
+        end
+        scan.last_change = { what = skills.describe_change(previous.options, options), keys = keys, count = #changed,
+            more = more, fewer = fewer }
+    end
+    scan.new_count = new_count
+    if previous and previous.charms == charms then
+        scan.last_of_kind, scan.new_count = previous.last_of_kind, previous.new_count
+    else
+        coroutine.yield()
+        scan.last_of_kind = skills.last_of_kind(charms, info.entry_of)
+    end
     state.scan = scan
     if state.settings.debug then
         coroutine.yield()
@@ -226,6 +248,15 @@ local function scan_job()
         state.scan_skill_options.names[i] = option.name
     end
     state.scan_time = os.date("%H:%M:%S")
+    local new_count
+    if state.scan then
+        local before = {}
+        for _, c in ipairs(state.scan.charms) do before[c.key] = c.fingerprint end
+        new_count = 0
+        for _, c in ipairs(charms) do
+            if before[c.key] ~= c.fingerprint then new_count = new_count + 1 end
+        end
+    end
 
     -- Picks belong to one save slot and character.
     local store = state.picks
@@ -235,7 +266,7 @@ local function scan_job()
             or files.read_json
         state.picks = picks.load(stats.save_slot, stats.play_start, read)
     end
-    analyse(charms, stats)
+    analyse(charms, stats, new_count)
 end
 
 local function cheapest(list)
@@ -568,6 +599,51 @@ local actions = {
     end,
     dismiss_notice = function(i)
         table.remove(state.notices, i)
+    end,
+
+    -- Skills panel: one skill, the skills a Find shows, Undo and Reset all.
+    set_skill = function(id, pref)
+        state.skills_undo = skills.copy_prefs(state.settings)
+        skills.set(state.settings, id, pref)
+        request_analysis()
+    end,
+    set_skills = function(ids, pref)
+        if #ids == 0 then return end
+        if #ids > SKILLS_CONFIRM then
+            state.skills_confirm = { ids = ids, pref = pref }
+            return
+        end
+        state.skills_undo = skills.copy_prefs(state.settings)
+        for _, id in ipairs(ids) do skills.set(state.settings, id, pref) end
+        request_analysis()
+    end,
+    reset_skills = function()
+        state.skills_confirm = { reset = true }
+    end,
+    confirm_skills = function()
+        local pending = state.skills_confirm
+        state.skills_confirm = nil
+        if not pending then return end
+        state.skills_undo = skills.copy_prefs(state.settings)
+        if pending.reset then
+            skills.restore_prefs(state.settings, {
+                keep_skills = { _format = state.settings.keep_skills._format },
+                skill_places = { _format = state.settings.skill_places._format },
+                ignore_skills = { _format = state.settings.ignore_skills._format },
+            })
+        else
+            for _, id in ipairs(pending.ids) do skills.set(state.settings, id, pending.pref) end
+        end
+        request_analysis()
+    end,
+    cancel_skills = function()
+        state.skills_confirm = nil
+    end,
+    undo_skills = function()
+        if not state.skills_undo then return end
+        skills.restore_prefs(state.settings, state.skills_undo)
+        state.skills_undo = nil
+        request_analysis()
     end,
 }
 

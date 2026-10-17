@@ -699,6 +699,81 @@ env.raw[SIDECAR_B] = nil
 rescan()
 assert(not env.has("could not be read"), "unblocked once the file is gone")
 
+-- Skills panel ------------------------------------------------------------------------
+-- The box now holds 1, 3, 7, 8 (protected), 4, 10, 11 and 12; rarity limit R8.
+local ui_view = require("BulkSell.ui")._view
+env.draw(nil, { [KEEP] = 7 })   -- best 1
+frames()
+env.draw()
+assert(env.headers["Skills: 0 keep all · 0 custom · 0 don't care###BulkSellSkills"], "Skills panel header")
+assert(env.has("Last change (Keep -> best 1)"), "last change line")
+env.draw({ "Show changed##BulkSellShowChanged" })
+env.draw()
+eq(ui_view.filter, 6, "Show changed switches the filter")
+eq(#ui_view.rows > 0, true, "changed rows shown")
+env.draw(nil, { ["Show##BulkSellFilter"] = 7 })   -- Last of their kind
+env.draw()
+local last_keys = {}
+for _, c in ipairs(ui_view.rows) do last_keys[c.key] = true end
+eq(last_keys[11], true, "the only Skill11 3 is the last of its kind")
+eq(last_keys[12], nil, "Skill7 1 and Skill11 1 are not the last of their kind")
+env.draw(nil, { ["Show##BulkSellFilter"] = 3 })   -- All
+env.draw()
+
+-- One skill through its own combo: Skill9 (best level 1) -> Keep all.
+env.draw(nil, { ["##BulkSellSkillPref9"] = 7 })
+eq(T.state.settings.keep_skills["9"], 1, "Keep all")
+frames()
+env.draw()
+assert(env.headers["Skills: 1 keep all · 0 custom · 0 don't care###BulkSellSkills"], "header counts the change")
+env.draw(nil, { ["##BulkSellSkillPref9"] = 1 })
+eq(T.state.settings.keep_skills["9"], nil, "back to Default")
+frames()
+
+-- "Set shown" needs a Find term; Don't care on Skill11 makes its level 3 leave the box.
+env.draw()
+assert(not env.buttons["Don't care##BulkSellSetShownignore"], "Set shown needs a Find term")
+env.draw(nil, { ["Find skill##BulkSellSkillFind"] = "skill11" })
+env.draw()
+assert(env.has("Set the 1 shown to:"), "set shown line")
+env.draw({ "Don't care##BulkSellSetShownignore" })
+frames()
+env.draw()
+eq(T.state.settings.ignore_skills["11"], true, "Skill11 is Don't care")
+assert(env.has("1 Don't-care skill levels leave your box"), "yellow Don't care line")
+assert(not env.has("No skill level leaves your box"), "no green promise")
+env.draw({ "Sell 3 talismans##BulkSellAll" })
+env.draw()
+assert(env.has("Skill11 3 (best left 1) #11 - Don't care"), "red block names the Don't care loss")
+assert(not env.buttons["Yes, sell##BulkSellConfirm"], "loss tick needed")
+env.draw({ "Cancel##BulkSellCancel" })
+
+-- More than 10 skills at once asks first; Undo puts every skill back.
+T.actions.set_skills({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }, { kind = "keep", min = 1 })
+env.draw()
+assert(env.has("Set 11 skills to Keep all?"), "confirmation for many skills")
+eq(T.state.settings.keep_skills["1"], nil, "nothing changed yet")
+env.draw({ "Yes##BulkSellSkillsYes" })
+eq(T.state.settings.keep_skills["11"], 1, "applied")
+eq(T.state.settings.ignore_skills["11"], nil, "one preference per skill")
+env.draw({ "Undo##BulkSellSkillsUndo" })
+eq(T.state.settings.keep_skills["1"], nil, "undone")
+eq(T.state.settings.ignore_skills["11"], true, "Don't care back")
+env.draw({ "Reset all##BulkSellSkillsReset" })
+env.draw()
+assert(env.has("Set every skill back to Default?"), "Reset all asks first")
+env.draw({ "Yes##BulkSellSkillsYes" })
+eq(T.state.settings.ignore_skills["11"], nil, "reset")
+env.draw(nil, { ["Find skill##BulkSellSkillFind"] = "" })
+frames()
+
+-- A talisman that changed counts as new at the next scan.
+set_packed(10, { 1009, 2011, 0, 0 })
+rescan()
+assert(env.has("1 new since the last scan"), "new talismans counted")
+set_packed(10, { 1009, 1011, 0, 0 })
+rescan()
+
 -- Debug files: a plan dump with string keys only (so it reads back as written) and a timing line.
 env.draw(nil, { ["Write debug files (for bug reports)##BulkSellDebug"] = true })
 env.draw(nil, { [KEEP] = 7 })
