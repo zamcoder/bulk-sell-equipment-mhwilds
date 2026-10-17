@@ -104,7 +104,7 @@ You can delete `reframework/data/BulkSell/` as well. It only holds settings and 
 | Path | Contents |
 |---|---|
 | `src/reframework/` | The mod, as it is shipped |
-| `dev/<set>/reframework/` | Development scripts that are never shipped, one set per test session: `probe-lite` (read-only checks), `compensate` (a one-time fix), and `probe-v1` (the original discovery probe: snapshots, method dumps, call traces) |
+| `dev/<set>/reframework/` | Development scripts that are never shipped, one set per test session: `probe-lite` (read-only checks) and `probe-v1` (the original discovery probe: snapshots, method dumps, call traces) |
 | `tests/` | Lua unit tests and smoke tests against a fake REFramework API, and `test_tools.ps1` for the PowerShell tools |
 | `tools/` | Development scripts |
 

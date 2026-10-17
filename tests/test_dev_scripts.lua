@@ -1,4 +1,4 @@
--- Smoke tests for the dev scripts used in test sessions: probe-lite (1a) and compensation (1b).
+-- Smoke tests for the dev scripts used in test sessions: probe-lite (session 1a).
 
 local mock = require("mock_reframework")
 local eq = mock.eq
@@ -47,15 +47,8 @@ local equip = new_object("app.savedata.cEquipParam", {
     }),
 })
 
-local money_gain = 1
-local basic_td = new_type("app.savedata.cBasicParam", { parent = "System.Object" })
-add_method(basic_td, "getMoney", "System.Int32", {}, function(self) return self.values.money end)
-add_method(basic_td, "addMoney", "System.Void", { "System.Int32", "System.Boolean" },
-    function(self, amount) self.values.money = self.values.money + amount * money_gain end)
-local basic = new_object("app.savedata.cBasicParam", { money = 25000000 })
-
 new_type("app.savedata.cUserSaveParam", { parent = "System.Object" })
-local save = new_object("app.savedata.cUserSaveParam", { _Equip = equip, _BasicData = basic, PlayStartDateTime = 123456 })
+local save = new_object("app.savedata.cUserSaveParam", { _Equip = equip, PlayStartDateTime = 123456 })
 
 local manager_td = new_type("app.SaveDataManager", { parent = "System.Object" })
 add_method(manager_td, "getCurrentUserSaveData", "app.savedata.cUserSaveParam", {}, function() return save end)
@@ -80,7 +73,6 @@ add_method(mission_td, "get_IsActiveQuest", "System.Boolean", {}, function() ret
 add_method(mission_td, "startQuest", "System.Void", { "System.Int32" }, function() error("must never be called") end)
 env.singletons["app.MissionManager"] = new_object("app.MissionManager", { _QuestDirector = new_object("app.cQuestDirector") })
 
-env.files["BulkSell/receipts/sold_20261016_004431.json"] = { talismans = { { box = 923, price = 6400 } } }
 env.enable_fs()
 
 local function frames(n)
@@ -154,81 +146,5 @@ probe_draw()
 local ui_test = assert(written("BulkSellProbe/ui_test_"), "ui test written")
 eq(ui_test.checkbox_clicks, 1, "checkbox click recorded")
 eq(ui_test.bindings.begin_disabled, true, "binding check recorded")
-
--- Compensation ------------------------------------------------------------------
-dofile(PROJECT_ROOT .. "/dev/compensate/reframework/autorun/BulkSellCompensate.lua")
-local compensate_ui = env.callbacks.draw_ui
-local MARKER = "BulkSell/compensation/v020-box923.json"
-
-local function compensate()
-    env.pressed["Compensate +1,600 z"] = true
-    env.texts = {}
-    compensate_ui()
-    frames()
-    env.texts = {}
-    compensate_ui()
-end
-
-local function clear_compensation()
-    for path in pairs(env.raw) do
-        if path == MARKER or path:find("^BulkSell/receipts/compensation_") then
-            env.raw[path] = nil
-            env.files[path] = nil
-        end
-    end
-end
-
-compensate()
-eq(basic.values.money, 25001600, "paid exactly 1,600 once")
-assert(env.has_text("OK: %+1,600 exact"), "status OK")
-eq(env.files[MARKER].state, "done", "done marker")
-assert(written("BulkSell/receipts/compensation_"), "compensation receipt")
-
-compensate()
-eq(basic.values.money, 25001600, "second run pays nothing")
-assert(env.has_text("Already done"), "already done")
-
--- A pending marker with the zenny already added is only finalized.
-clear_compensation()
-env.put_raw(MARKER, "pending-ok", { state = "pending", money_before = 25000000, amount = 1600 })
-compensate()
-eq(basic.values.money, 25001600, "pending marker finalized without paying")
-eq(env.files[MARKER].state, "done", "pending became done")
-
--- A pending marker without the zenny stops without paying.
-clear_compensation()
-env.put_raw(MARKER, "pending-bad", { state = "pending", money_before = 25001600, amount = 1600 })
-compensate()
-eq(basic.values.money, 25001600, "nothing paid on a pending mismatch")
-assert(env.has_text("FAILED: a pending marker exists"), "pending mismatch reported")
-
--- A receipt without its marker never pays again.
-clear_compensation()
-env.put_raw("BulkSell/receipts/compensation_20261017_000000.json", "old-receipt", { kind = "compensation" })
-compensate()
-eq(basic.values.money, 25001600, "nothing paid when a receipt exists")
-assert(env.has_text("compensation receipt already exists"), "existing receipt reported")
-
--- The v0.2.0 receipt must show the underpayment.
-clear_compensation()
-env.put_raw("BulkSell/receipts/sold_20261016_004431.json", "wrong-v020", { talismans = { { box = 1, price = 1500 } } })
-compensate()
-eq(basic.values.money, 25001600, "nothing paid without the v0.2.0 evidence")
-assert(env.has_text("does not show box 923"), "missing evidence reported")
-env.put_raw("BulkSell/receipts/sold_20261016_004431.json", "good-v020", { talismans = { { box = 923, price = 6400 } } })
-
--- Never while a menu is open.
-full_screen = true
-compensate()
-assert(env.has_text("not now: close the game menu first"), "waits for the menu")
-eq(basic.values.money, 25001600, "nothing paid with a menu open")
-full_screen = false
-
--- A payment that does not arrive keeps the pending marker and stops.
-money_gain = 0
-compensate()
-assert(env.has_text("zenny changed by 0 instead of 1600"), "missing zenny reported")
-eq(env.files[MARKER].state, "pending", "pending marker kept")
-money_gain = 1
 
 print("dev script tests passed")

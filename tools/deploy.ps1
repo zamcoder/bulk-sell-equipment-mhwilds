@@ -5,7 +5,7 @@
 .DESCRIPTION
   Files only take effect after REFramework "Reset Scripts" or a game restart.
   (no switch)       copy src\reframework (the mod)
-  -Dev <set>        also copy dev\<set>\reframework (for example probe-lite, compensate, probe-v1)
+  -Dev <set>        also copy dev\<set>\reframework (for example probe-lite, probe-v1)
   -RemoveDev        delete every file any dev set could have installed
   -Remove           delete the mod and every dev file
   -Release <zip>    delete the mod and every dev file, then install the reframework folder of a
