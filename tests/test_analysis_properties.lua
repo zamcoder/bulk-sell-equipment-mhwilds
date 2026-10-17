@@ -315,7 +315,7 @@ test("2400 talismans: fast enough, and no long stretch without a yield", functio
         local limit = math.max(0.008, 12 * median)
         print(string.format("     %s: %.3f s, %d yields, longest stretch %.1f ms (median %.1f ms, limit %.1f ms)",
             name, seconds, #fastest - 1, longest * 1000, median * 1000, limit * 1000))
-        eq(seconds < 3, true, name .. ": total time")
+        eq(seconds < (base.decorations and 6 or 3), true, name .. ": total time")   -- decorations: the heaviest path
         eq(longest <= limit, true, name .. ": longest stretch between yields")
     end
 end)

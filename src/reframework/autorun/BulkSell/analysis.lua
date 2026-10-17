@@ -323,7 +323,7 @@ local function dominate(groups, decorations, locked, work)
                 end
             end
         end
-        work(1 + checked * (decos and 3 or 1) + seen // 4)
+        work(1 + checked * (decos and 6 or 1) + seen // 4)   -- a decoration cover check costs about 6 plain ones
     end
 end
 
