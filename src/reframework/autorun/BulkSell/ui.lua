@@ -188,6 +188,21 @@ local function skill_rows(scan, settings)
     return view.skill_rows
 end
 
+-- Combo choices and labels for a best level and a preference, built once instead of every frame.
+local choice_cache = {}
+local function skill_choices(best, pref)
+    local key = table.concat({ best, pref.kind, pref.n or pref.min or "" }, ":")
+    local entry = choice_cache[key]
+    if not entry then
+        local choices, current = skills.choices(best, pref)
+        local labels = {}
+        for i, choice in ipairs(choices) do labels[i] = skills.label(choice) end
+        entry = { choices, current, labels }
+        choice_cache[key] = entry
+    end
+    return entry[1], entry[2], entry[3]
+end
+
 local function draw_skill_row(state, actions, row)
     local pref = skills.pref_of(state.settings, row.id)
     local ignored = pref.kind == "ignore"
@@ -199,13 +214,12 @@ local function draw_skill_row(state, actions, row)
     imgui.table_set_column_index(2)
     imgui.text(tostring(row.best))
     imgui.table_set_column_index(3)
-    local choices, current = skills.choices(row.best, pref)
-    local labels = {}
-    for i, choice in ipairs(choices) do labels[i] = skills.label(choice) end
+    local choices, current, labels = skill_choices(row.best, pref)
     local changed, index = imgui.combo("##BulkSellSkillPref" .. row.id, current, labels)
     if changed and choices[index] and not skills.same(choices[index], pref) then actions.set_skill(row.id, choices[index]) end
     imgui.table_set_column_index(4)
-    local after = row.kept > 0 and T("after_kept", row.kept, row.kept_best) or T("after_none")
+    row.after = row.after or (row.kept > 0 and T("after_kept", row.kept, row.kept_best) or T("after_none"))
+    local after = row.after
     if row.loss then
         imgui.text_colored(after .. (ignored and T("after_dont_care") or ""), RED)
     elseif ignored then
