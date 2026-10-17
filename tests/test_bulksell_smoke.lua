@@ -428,7 +428,7 @@ eq(at(2).values.category, -1, "box 2 cleared")
 eq(basic.values.money, 1001500, "zenny credited")
 eq(calls.remove_accessory, 3, "decorations removed from every slot like the game does")
 eq(calls.update_myset, 1, "loadouts updated after the sale")
-assert(env.has("Sold 1 talismans for 1,500 z."), "sale result")
+assert(env.has("Sold 1 talisman for 1,500 z."), "sale result")
 local receipt = receipts()[#receipts()]
 eq(receipt.sold, 1, "receipt count")
 eq(receipt.talismans[1].box, 2, "receipt box")
@@ -650,7 +650,7 @@ set_box_override[4] = nil
 price_override[4] = 9999
 rescan()
 local money = basic.values.money
-env.draw({ "Sell 1 talismans##BulkSellAll" })
+env.draw({ "Sell 1 talisman##BulkSellAll" })
 env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
 env.draw()
@@ -662,7 +662,7 @@ rescan()
 
 -- A talisman favorited after the scan is kept by the last check.
 at(4).values.FreeVal4 = 1
-env.draw({ "Sell 1 talismans##BulkSellAll" })
+env.draw({ "Sell 1 talisman##BulkSellAll" })
 env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
 env.draw()
@@ -677,7 +677,7 @@ assert(env.has("Nothing more to sell: every talisman is unique."), "rescan prote
 at(4).values.FreeVal4 = 0
 rescan()
 money_gain = 0
-env.draw({ "Sell 1 talismans##BulkSellAll" })
+env.draw({ "Sell 1 talisman##BulkSellAll" })
 env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
 env.draw()
@@ -687,18 +687,18 @@ money_gain = 1
 -- Confirmations can be cancelled, and expire.
 restore_box4()
 rescan()
-env.draw({ "Sell 1 talismans##BulkSellAll" })
+env.draw({ "Sell 1 talisman##BulkSellAll" })
 env.draw({ "Cancel##BulkSellCancel" })
 env.draw()
 assert(not env.has("This cannot be undone"), "cancelled confirmation hidden")
-env.draw({ "Sell 1 talismans##BulkSellAll" })
+env.draw({ "Sell 1 talisman##BulkSellAll" })
 env.advance(30)
 frames(1)
 env.draw()
 assert(not env.has("This cannot be undone"), "expired confirmation hidden")
 
 -- A covered talisman is kept when the talisman that covers it changed after the scan.
-env.draw({ "Sell 1 talismans##BulkSellAll" })
+env.draw({ "Sell 1 talisman##BulkSellAll" })
 set_packed(3, { 1009, 0, 0, 0 })
 env.draw({ "Yes, sell##BulkSellConfirm" })
 frames()
@@ -713,7 +713,7 @@ env.put_raw(SIDECAR_B, "garbage")
 rescan()
 assert(env.has_text("RNG Charm Crafting file TalismanCrafting/special%-bonuses%-slot%-0%-b%.json could not be read"),
     "corrupt sidecar blocks selling")
-assert(not env.buttons["Sell 1 talismans##BulkSellAll"], "no sell button while blocked")
+assert(not env.buttons["Sell 1 talisman##BulkSellAll"], "no sell button while blocked")
 env.raw[SIDECAR_B] = nil
 rescan()
 assert(not env.has("could not be read"), "unblocked once the file is gone")
@@ -913,11 +913,27 @@ new_talisman(2, 190, { 1005, 0, 0, 1000 })   -- R6 Skill5 1, A1: covered by box 
 frames(160)
 assert(env.game_calls() > calls_after_look, "the box was looked at again")
 draw_toast()
-assert(env.has("Equipment Box: 1 new items since your last scan. Open Bulk Sell (Insert) to check."), "toast")
+assert(env.has("Bulk Sell"), "toast title")
+assert(env.has("1 new item in your Equipment Box"), "toast")
 eq(T.state.stale, true, "the plan is stale")
 env.advance(13)
 draw_toast()
 eq(#env.texts, 0, "the toast goes away")
+
+-- Melding: one talisman goes out, then a new one comes in. The message still says 1 new item
+-- (the net change since the scan would be 0).
+local melded = { category = at(10).values.category, flags = at(10).values.Category_Gender }
+local melded_ok = pcall(function()
+    at(10).values.category, at(10).values.Category_Gender = -1, 141
+    frames(260)
+    at(10).values.category, at(10).values.Category_Gender = melded.category, melded.flags
+    frames(260)
+end)
+assert(melded_ok, "melding steps")
+draw_toast()
+assert(env.has("2 new items in your Equipment Box"), "every drop counts: 1 before, 1 now")
+env.advance(13)
+draw_toast()
 
 -- Messages wait while the quest result screen is up; quest state changes are logged once.
 result_flow, in_quest = true, true
@@ -928,7 +944,7 @@ eq(#env.texts, 0, "held back during the result screen")
 result_flow = false
 frames(260)
 draw_toast()
-assert(env.has("Equipment Box: 2 new items since your last scan."), "shown after the result screen")
+assert(env.has("3 new items in your Equipment Box"), "shown after the result screen (every new item since the scan)")
 local quest_lines = 0
 for _, line in ipairs(env.logs) do
     if line:find("watch: quest_active false -> true", 1, true) then quest_lines = quest_lines + 1 end
@@ -953,13 +969,13 @@ eq(receipt.sold, 2, "both new talismans sold")
 eq(receipt.trigger, "auto-clean", "receipt trigger")
 frames(2)
 env.draw()
-assert(not env.has("new talismans since you last cleared them"), "sold arrivals leave the list")
+assert(not env.has("since you last cleared"), "sold arrivals leave the list")
 new_talisman(13, 190, { 1005, 0, 0, 1000 })
 rescan()
-assert(env.has("1 new talismans since you last cleared them."), "a later arrival")
+assert(env.has("1 new talisman since you last cleared it."), "a later arrival")
 env.draw({ "Clear##BulkSellClearNew" })
 env.draw()
-assert(not env.has("new talismans since you last cleared them"), "cleared")
+assert(not env.has("since you last cleared"), "cleared")
 env.draw(nil, { ["Show##BulkSellFilter"] = 3 })
 
 -- The box is nearly full (3 of 14 free): one message when it crosses the line.
@@ -969,7 +985,7 @@ frames(1)
 env.advance(6)
 frames(1)
 draw_toast()
-assert(env.has("Equipment Box: only 3 free slots left."), "capacity toast")
+assert(env.has("Your Equipment Box has only 3 free slots left."), "capacity toast")
 env.advance(13)
 frames(260)
 draw_toast()

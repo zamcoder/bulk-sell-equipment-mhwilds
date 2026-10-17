@@ -77,7 +77,7 @@ local state = {
     seen = nil,           -- box contents at the last scan, for new arrivals
     arrivals = {},        -- [box] = fingerprint of talismans that arrived since they were last cleared
     free_at_scan = nil,   -- free box entries at the last scan
-    watch = { next_at = 0, free = nil, guards = {}, capacity = "ok" },   -- auto-clean watch
+    watch = { next_at = 0, free = nil, arrived = 0, guards = {}, capacity = "ok" },   -- auto-clean watch
     toast = nil,          -- { text, until }: a message shown while the REFramework menu is closed
     toast_pending = nil,  -- a message held back while the quest result screen is up
     clipboard = nil,      -- text the UI puts on the clipboard in its next frame
@@ -328,6 +328,7 @@ local function scan_job()
     end
     state.free_at_scan = stats.empty_reported or (stats.slots - stats.used)
     state.watch.free = state.free_at_scan
+    state.watch.arrived = 0
     for _, key in ipairs(stars.stale_keys(state.stars, charms)) do stars.forget(state.stars, key) end
     save_stars()
     analyse(charms, stats, new_count)
@@ -893,8 +894,11 @@ local function watch_box()
     end
     local free, total = game.box_free()
     if not free then return end
+    -- Every drop counts: the Melding Pot first takes talismans out (more free entries) and
+    -- then puts new ones in, so the net change since the scan can be 0.
     if w.free and free < w.free then
-        local text = T("toast_new_items", (state.free_at_scan or w.free) - free)
+        w.arrived = w.arrived + (w.free - free)
+        local text = lang.N("toast_new_items", w.arrived)
         if guards.result_flow ~= true then show_toast(text) else state.toast_pending = text end
         if state.scan then state.stale = true end
     end
@@ -903,7 +907,7 @@ local function watch_box()
         local cap = capacity.of(total - free, total)
         local level = cap and cap.level or "ok"
         if level ~= "ok" and level ~= w.capacity then
-            local text = T("toast_capacity", free)
+            local text = lang.N("toast_capacity", free)
             if guards.result_flow ~= true then show_toast(text) else state.toast_pending = text end
         end
         w.capacity = level

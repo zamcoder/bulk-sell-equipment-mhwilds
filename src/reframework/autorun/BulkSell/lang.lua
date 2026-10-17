@@ -12,9 +12,13 @@ local EN = {
     debug_files = "Write debug files (for bug reports)",
     auto_clean = "Tell me about new items while the menu is closed (auto-clean)",
     capacity_toast = "Also tell me when the Equipment Box is almost full",
-    toast_new_items = "Equipment Box: %d new items since your last scan. Open Bulk Sell (Insert) to check.",
-    toast_capacity = "Equipment Box: only %d free slots left. Open Bulk Sell (Insert) to make room.",
+    toast_title = "Bulk Sell",
+    toast_new_items = "%d new items in your Equipment Box since your last scan. Open Bulk Sell (Insert) to check.",
+    toast_new_items_one = "%d new item in your Equipment Box since your last scan. Open Bulk Sell (Insert) to check.",
+    toast_capacity = "Your Equipment Box has only %d free slots left. Open Bulk Sell (Insert) to make room.",
+    toast_capacity_one = "Your Equipment Box has only %d free slot left. Open Bulk Sell (Insert) to make room.",
     arrivals_line = "%d new talismans since you last cleared them.",
+    arrivals_line_one = "%d new talisman since you last cleared it.",
     arrivals_show = "Show new",
     arrivals_clear = "Clear",
     debug_perf = "Last job: %s, %d frames, longest step %.1f ms",
@@ -89,8 +93,9 @@ local EN = {
 
     -- Selling
     sell_all = "Sell %d talismans",
+    sell_all_one = "Sell %d talisman",
     sell_shown = "Sell the %d shown",
-    sell_one = "Sell just 1 (test)",
+    sell_test = "Sell just 1 (test)",
     empty_covered = "Nothing more to sell: every talisman is unique. To free space, choose \"Keep the best N per skill\" above.",
     empty_manual = "Nothing is ticked. Tick talismans in the list, or choose another Keep option above.",
     empty_best = "Nothing to sell with these settings.",
@@ -101,7 +106,7 @@ local EN = {
     notice_picks_not_saved = "Your picks could not be saved; see the REFramework log.",
     notice_picks_removed = "%d picks removed: %s",
     confirm_question = "Sell %s for %s z? This cannot be undone.",
-    confirm_one = "1 talisman (%s)",
+    confirm_single = "1 talisman (%s)",
     confirm_many = "%d talismans",
     confirm_unique = "%d are unique: no identical or better talisman stays. For each of their skills and slot shapes "
         .. "you keep at least %d that rank higher.",
@@ -119,6 +124,7 @@ local EN = {
     selling_progress = "Selling... %d / %d  (%s z)",
     stop = "Stop",
     sold_result = "Sold %d talismans for %s z.",
+    sold_result_one = "Sold %d talisman for %s z.",
     sold_skipped = "%d were kept after a last check (changed, equipped, favorite...).",
     stopped = "Stopped: %s",
     receipt = "Receipt: reframework/data/%s",
@@ -141,7 +147,9 @@ local EN = {
     star_confirm_remove = "Remove the %d stars Bulk Sell added? Stars you set yourself are not touched.",
     star_progress = "Changing stars... %d / %d",
     star_result_add = "Starred %d talismans.",
+    star_result_add_one = "Starred %d talisman.",
     star_result_remove = "Removed %d stars.",
+    star_result_remove_one = "Removed %d star.",
     star_skipped = "%d were skipped (changed since the scan).",
     stars_not_saved = "the list of stars Bulk Sell added could not be saved.",
     export_scope = "Export",
@@ -161,6 +169,7 @@ local EN = {
     wikidb_step_2 = "2. Paste into \"Import/Export Charms\" and press Import.",
     wikidb_warning = "Importing replaces the whole talisman list on the site.",
     export_copied = "Copied %d talismans to the clipboard.",
+    export_copied_one = "Copied %d talisman to the clipboard.",
     export_saved = "Also saved as reframework/data/%s",
     export_not_saved = "This REFramework build cannot write text files, so the list is only on the clipboard.",
     export_some_names = "Some names were not available in that language and are in the game's language.",
@@ -235,6 +244,14 @@ local EN = {
 
 lang.EN = EN
 local current = EN
+
+-- A text with a count as its first value: "<key>_one" is used when the count is 1 and that
+-- text exists ("1 new item" rather than "1 new items").
+-- Both texts take the count as their first value.
+function lang.N(key, n, ...)
+    if n == 1 and (current[key .. "_one"] or EN[key .. "_one"]) then key = key .. "_one" end
+    return lang.T(key, n, ...)
+end
 
 function lang.T(key, ...)
     local text = current[key] or EN[key]

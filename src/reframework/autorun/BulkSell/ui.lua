@@ -54,10 +54,10 @@ local function thousands(n)
 end
 
 -- Draws a long message on several lines, broken at spaces.
-local function wrap(text)
+local function wrap_at(text, width)
     local lines, rest = {}, tostring(text)
-    while #rest > WRAP do
-        local cut = rest:sub(1, WRAP + 1):match("^.*() ")   -- the last space that keeps the line short enough
+    while #rest > width do
+        local cut = rest:sub(1, width + 1):match("^.*() ")   -- the last space that keeps the line short enough
         if not cut or cut <= 1 then break end
         lines[#lines + 1] = rest:sub(1, cut - 1)
         rest = rest:sub(cut + 1)
@@ -65,6 +65,8 @@ local function wrap(text)
     lines[#lines + 1] = rest
     return lines
 end
+
+local function wrap(text) return wrap_at(text, WRAP) end
 
 local function say(text, color)
     for _, l in ipairs(wrap(text)) do
@@ -330,7 +332,7 @@ end
 
 local function draw_sale_result(sale)
     if not sale.finished then return end
-    imgui.text_colored(T("sold_result", sale.sold, thousands(sale.zenny)), GREEN)
+    imgui.text_colored(lang.N("sold_result", sale.sold, thousands(sale.zenny)), GREEN)
     if #sale.skipped > 0 then imgui.text(T("sold_skipped", #sale.skipped)) end
     if sale.stopped then imgui.text_colored(T("stopped", sale.stopped), YELLOW) end
     if sale.receipt then imgui.text(T("receipt", sale.receipt)) end
@@ -368,7 +370,7 @@ local function draw_losses(state, confirm)
 end
 
 local function draw_confirm(state, actions, confirm)
-    local what = confirm.label and T("confirm_one", confirm.label) or T("confirm_many", confirm.count)
+    local what = confirm.label and T("confirm_single", confirm.label) or T("confirm_many", confirm.count)
     say(T("confirm_question", what, thousands(confirm.zenny)), YELLOW)
     if confirm.unique_rule > 0 then say(T("confirm_unique", confirm.unique_rule, state.scan.settings.best_n)) end
     if confirm.picks > 0 then imgui.text(T("confirm_picks", confirm.picks)) end
@@ -430,7 +432,7 @@ local function draw_sell_controls(state, actions, rows)
         imgui.text(empty_text(state.scan.settings))
         return
     end
-    if imgui.button(T("sell_all", count) .. "##BulkSellAll") then actions.request_sell("all") end
+    if imgui.button(lang.N("sell_all", count) .. "##BulkSellAll") then actions.request_sell("all") end
     local shown = view.rows_sell or 0
     if shown > 0 and shown < count then
         imgui.same_line()
@@ -440,7 +442,7 @@ local function draw_sell_controls(state, actions, rows)
     end
     if shown > 0 then
         imgui.same_line()
-        if imgui.button(T("sell_one") .. "##BulkSellOne") then
+        if imgui.button(T("sell_test") .. "##BulkSellOne") then
             actions.request_sell("one", rows, view.filter == FILTER_NEW and "auto-clean" or nil)
         end
     end
@@ -473,7 +475,7 @@ local function draw_summary(state, actions)
         say(T("planner", thousands(summary.zenny), thousands(points)), GREY)
     end
     if (view.arrivals_count or 0) > 0 then
-        imgui.text_colored(T("arrivals_line", view.arrivals_count), YELLOW)
+        imgui.text_colored(lang.N("arrivals_line", view.arrivals_count), YELLOW)
         imgui.same_line()
         if imgui.button(T("arrivals_show") .. "##BulkSellShowNew") then view.filter, view.page = FILTER_NEW, 1 end
         imgui.same_line()
@@ -613,7 +615,7 @@ end
 
 local function draw_star_result(run)
     if not run or not run.finished then return end
-    imgui.text_colored(T(run.want and "star_result_add" or "star_result_remove", run.changed), GREEN)
+    imgui.text_colored(lang.N(run.want and "star_result_add" or "star_result_remove", run.changed), GREEN)
     if #run.skipped > 0 then imgui.text(T("star_skipped", #run.skipped)) end
     if run.stopped then say(T("stopped", run.stopped), YELLOW) end
 end
@@ -676,7 +678,7 @@ local function draw_export(state, actions)
     local result = state.export_result
     if result then
         if result.kind == "wikidb" then
-            imgui.text_colored(T("export_copied", result.count), GREEN)
+            imgui.text_colored(lang.N("export_copied", result.count), GREEN)
             say(result.path and T("export_saved", result.path) or T("export_not_saved"))
             if result.missing_names then say(T("export_some_names"), YELLOW) end
         elseif result.path then
@@ -797,6 +799,24 @@ end
 
 -- A short message in a corner while the REFramework menu is closed. It takes no input and
 -- only reads Lua state (it is drawn from re.on_frame).
+local TOAST_WRAP = 60
+local TOAST_STYLE = {   -- ImGuiCol index, RGBA: a dark panel with a gold edge, like the game's own notices
+    { 2, 0.06, 0.05, 0.04, 0.88 },   -- WindowBg
+    { 5, 0.84, 0.69, 0.35, 0.90 },   -- Border
+}
+local TOAST_GOLD = 0xFF6CC8E8
+
+-- Where the message goes: the right side of the screen, a third of the way down, when the
+-- screen size is known; otherwise the top left.
+local function place_toast()
+    local size = has("get_display_size") and imgui.get_display_size()
+    if size and size.x and size.x > 0 then
+        imgui.set_next_window_pos(Vector2f.new(size.x - 24, size.y * 0.30), 1, Vector2f.new(1, 0))   -- top right corner there
+    else
+        imgui.set_next_window_pos(Vector2f.new(40, 140), 1)
+    end
+end
+
 function ui.toast(state)
     local toast = state.toast
     if not toast then return end
@@ -805,10 +825,21 @@ function ui.toast(state)
         return
     end
     if reframework:is_drawing_ui() then return end
-    pcall(function() imgui.set_next_window_pos(Vector2f.new(40, 140), 1) end)   -- ImGuiCond_Always
+    pcall(place_toast)
+    -- Colours are pushed one by one and popped exactly as often, or ImGui would break.
+    local pushed = 0
+    if has("push_style_color") and has("pop_style_color") and Vector4f then
+        for _, c in ipairs(TOAST_STYLE) do
+            if pcall(imgui.push_style_color, c[1], Vector4f.new(c[2], c[3], c[4], c[5])) then pushed = pushed + 1 end
+        end
+    end
     imgui.begin_window("Bulk Sell###BulkSellToast", nil, TOAST_FLAGS)
-    imgui.text(toast.text)
+    pcall(function()
+        imgui.text_colored(T("toast_title"), TOAST_GOLD)
+        for _, line in ipairs(wrap_at(toast.text, TOAST_WRAP)) do imgui.text(line) end
+    end)
     imgui.end_window()
+    if pushed > 0 then imgui.pop_style_color(pushed) end
 end
 
 -- Exposed for tests.

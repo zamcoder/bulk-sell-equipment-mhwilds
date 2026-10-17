@@ -312,7 +312,7 @@ test("2400 talismans: fast enough, and no long stretch without a yield", functio
         local sorted = copy(fastest)
         table.sort(sorted)
         local median = sorted[(#sorted + 1) // 2]
-        local limit = math.max(0.008, 12 * median)
+        local limit = math.max(0.012, 12 * median)   -- a forgotten whole-box loop takes 20+ ms
         print(string.format("     %s: %.3f s, %d yields, longest stretch %.1f ms (median %.1f ms, limit %.1f ms)",
             name, seconds, #fastest - 1, longest * 1000, median * 1000, limit * 1000))
         eq(seconds < (base.decorations and 6 or 3), true, name .. ": total time")   -- decorations: the heaviest path

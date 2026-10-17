@@ -25,7 +25,7 @@ test("every text key used by the code exists", function()
         local file = assert(io.open(PROJECT_ROOT .. "/src/reframework/autorun/" .. name, "r"))
         local text = file:read("a")
         file:close()
-        for key in text:gmatch('T%("([%w_]+)"%s*[,)]') do
+        for key in text:gmatch('[TN]%("([%w_]+)"%s*[,)]') do
             if not lang.EN[key] then missing[#missing + 1] = name .. ": " .. key end
         end
     end
@@ -40,6 +40,20 @@ test("T formats and never fails", function()
     eq(lang.T("no_such_key"), "no_such_key", "unknown key")
     eq(lang.T("sell_all", "x"), "Sell %d talismans", "bad argument keeps the template")
     eq(lang.T("ok"), "OK", "no arguments")
+end)
+
+test("singular texts take the count like the plural ones", function()
+    for key, text in pairs(lang.EN) do
+        if key:find("_one$") then
+            local plural = lang.EN[key:gsub("_one$", "")]
+            assert(plural, key .. " has a plural text")
+            local _, a = text:gsub("%%[ds]", "")
+            local _, b = plural:gsub("%%[ds]", "")
+            eq(a, b, key .. " takes the same values")
+        end
+    end
+    eq(lang.N("sold_result", 1, "1,500"), "Sold 1 talisman for 1,500 z.")
+    eq(lang.N("sold_result", 2, "3,000"), "Sold 2 talismans for 3,000 z.")
 end)
 
 test("every text is ASCII except the middle dot", function()
