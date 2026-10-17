@@ -190,4 +190,34 @@ star_run()
 assert(env.has_text("not now: close the game menu first"), "waits for the menu")
 full_screen = false
 
+-- Notice probe (session 5): reads type and method names only ----------------------------
+local chat_td = new_type("app.ChatManager", { parent = "System.Object" })
+local called = false
+add_method(chat_td, "reqAddSystemLog", "System.Void", { "System.String" }, function() called = true end)
+add_method(chat_td, "update", "System.Void", {}, function() called = true end)
+env.singletons["app.ChatManager"] = new_object("app.ChatManager")
+new_type("app.SomethingElse", { parent = "System.Object" })
+local type_list = { mock.types["app.SomethingElse"], chat_td, mock.types["app.GUIManager"] }
+sdk.get_tdb = function()
+    return {
+        get_num_types = function() return #type_list end,
+        get_type = function(_, i) return type_list[i + 1] end,
+    }
+end
+dofile(PROJECT_ROOT .. "/dev/notice-probe/reframework/autorun/BulkSellNoticeProbe.lua")
+local notice_ui = env.callbacks.draw_ui
+env.pressed["List game notice methods (read-only)"] = true
+env.texts = {}
+notice_ui()
+frames()
+env.texts = {}
+notice_ui()
+local notice = assert(written("BulkSellProbe/notice_candidates_"), "notice candidates written")
+eq(notice.found[1].type, "app.ChatManager", "chat manager found")
+eq(notice.found[1].singleton, true, "singleton seen")
+eq(notice.found[1].methods[1], "System.Void reqAddSystemLog(System.String)", "method signature")
+eq(#notice.found[1].methods, 1, "only notice-like methods")
+eq(called, false, "no game method was called")
+sdk.get_tdb = nil
+
 print("dev script tests passed")
