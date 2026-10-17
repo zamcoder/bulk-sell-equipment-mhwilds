@@ -91,6 +91,7 @@ What this means in practice:
 - **Stars:** "Star the N kept", "Star my Keep picks" and "Remove stars Bulk Sell added" use the game's own favorite star. Bulk Sell never sells favorites, other mods such as Talisman Analyser skip them too, and the star shows in the game's own lists. Bulk Sell remembers which stars it added and never removes yours.
 - **Export:** "Copy for mhwilds.wiki-db.com" puts your talismans (all, what stays, or only the sales) on the clipboard in the format of the site's Talisman tab, and "Save CSV" writes a spreadsheet. Names can be in the game's language or in English, Japanese, Korean or Chinese.
 - **Melding Pot comparison:** the summary also shows how many Melding Pot points the planned sales would be worth instead of zenny.
+- **Auto-clean watch** (off by default): while the REFramework menu is closed, the mod tells you in a small message when new items arrive or the box is almost full. The **New arrivals** filter then lists the new talismans. It never sells without your click.
 - **Pays the game's own price:** 1,500 / 3,000 / 4,500 / 8,000 z for rarity 5 / 6 / 7 / 8.
 - **Writes a JSON receipt** for every sale run, with the rules used and why each talisman was sold.
 
@@ -113,6 +114,7 @@ The mod also checks itself while it sells:
 - **The list is made again when the box may have changed.** After you close the REFramework menu, open a full-screen game menu or an equipment list, the window says "Rescanning..." and scans again before you can sell.
 - **The whole list is checked against the plan before the first talisman is sold**, and each box entry is checked again right before it is sold. A talisman that changed since the scan is skipped. So is a duplicate or covered talisman whose kept talisman is gone, and a unique talisman when one of the talismans kept for its skills changed.
 - **Selling waits** while a game menu is open or the game is saving, and **stops** when you close the REFramework menu.
+- **Nothing touches the game while the REFramework menu is closed**, except, when you switch the auto-clean watch on, one look at the box and at the quest and save state every 5 seconds.
 - **The sale price is checked twice.** It must equal half the talisman's value, which is what the game pays.
 - **A run stops on its own** if zenny does not go up by exactly the expected amount.
 - **The confirmation expires** after 20 seconds, and a **Stop** button ends a run early.
@@ -170,6 +172,7 @@ The window tells you once which of these happened. Going back to 0.2.x still wor
 | `reframework/data/BulkSell/picks/slot-<n>-a.json`, `-b.json` | Your ticks for save slot `n`: two copies written in turn, so a crash during a write cannot lose them |
 | `reframework/data/BulkSell/receipts/sold_*.json` | One receipt per sale run: each talisman sold, its price and why, the rules and ticks used, plus zenny before and after |
 | `reframework/data/BulkSell/stars/slot-<n>-a.json`, `-b.json` | The stars Bulk Sell added for save slot `n`, so it can remove exactly those |
+| `reframework/data/BulkSell/seen/slot-<n>-a.json`, `-b.json` | What was in the box at your last scan, so new arrivals can be found |
 | `reframework/data/BulkSell/export/` | Your exports: `wikidb_<language>_<time>.txt` (the same text as on the clipboard) and `talismans_<time>.csv` |
 | `reframework/data/BulkSell/debug/plan_*.json` | Only with **Write debug files** ticked (in the Bulk Sell menu): the whole plan, for bug reports |
 

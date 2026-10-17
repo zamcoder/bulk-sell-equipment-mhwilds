@@ -163,6 +163,17 @@ Open **Tools**, click **Star the N kept...**, then **Yes**. Every kept talisman 
 
 Careful: importing **replaces** the whole talisman list on the site. **Save CSV** writes a spreadsheet file instead.
 
+### Get told when new talismans arrive
+1. Open **Script Generated UI → Bulk Sell Equipment** and tick **Tell me about new items while the menu is closed (auto-clean)**. Optionally also tick **Also tell me when the Equipment Box is almost full**.
+2. Play as usual. When a quest reward or the Melding Pot puts new items in your box, a small message appears in a corner for a few seconds:
+   > Equipment Box: 3 new items since your last scan. Open Bulk Sell (Insert) to check.
+
+   It waits until the quest result screen is gone, and it never sells anything.
+3. Press **Insert**. The window scans again by itself and shows "3 new talismans since you last cleared them." Click **Show new** to see only those.
+4. Sell what you do not need with **Sell the N shown**, or click **Clear** to forget them.
+
+Tip: star the talismans you crafted on purpose, so they never show up as something to sell.
+
 ### Compare zenny with the Melding Pot
 The summary shows both, for example:
 > Selling these gives 1,363,000 z. Melding them would give 1,713 Melding Pot points instead, but melding makes new talismans to appraise, so it does not empty your box.

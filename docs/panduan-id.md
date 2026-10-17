@@ -165,6 +165,17 @@ Buka **Tools**, klik **Star the N kept...**, lalu **Yes**. Semua talisman yang d
 
 Hati-hati: import **mengganti** seluruh daftar talisman di situs itu. Kalau mau file spreadsheet, pakai **Save CSV**.
 
+### Diberi tahu saat ada talisman baru masuk
+1. Buka **Script Generated UI → Bulk Sell Equipment**, lalu centang **Tell me about new items while the menu is closed (auto-clean)**. Kalau mau, centang juga **Also tell me when the Equipment Box is almost full**.
+2. Main seperti biasa. Setiap kali hadiah quest atau Melding Pot memasukkan barang baru ke box, muncul pesan kecil di pojok layar selama beberapa detik:
+   > Equipment Box: 3 new items since your last scan. Open Bulk Sell (Insert) to check.
+
+   Pesan ini menunggu sampai layar hasil quest selesai, dan tidak pernah menjual apa pun.
+3. Tekan **Insert**. Window akan scan ulang sendiri, lalu menampilkan "3 new talismans since you last cleared them." Klik **Show new** untuk melihat hanya talisman-talisman baru itu.
+4. Jual yang tidak kamu butuhkan dengan **Sell the N shown**, atau klik **Clear** kalau mau mengabaikannya.
+
+Tips: beri bintang pada talisman yang sengaja kamu buat (crafting), supaya tidak pernah muncul sebagai talisman yang bisa dijual.
+
 ### Membandingkan zenny dengan Melding Pot
 Ringkasan menampilkan keduanya, misalnya:
 > Selling these gives 1,363,000 z. Melding them would give 1,713 Melding Pot points instead, but melding makes new talismans to appraise, so it does not empty your box.
