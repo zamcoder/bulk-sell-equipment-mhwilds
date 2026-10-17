@@ -147,4 +147,47 @@ local ui_test = assert(written("BulkSellProbe/ui_test_"), "ui test written")
 eq(ui_test.checkbox_clicks, 1, "checkbox click recorded")
 eq(ui_test.bindings.begin_disabled, true, "binding check recorded")
 
+-- Star test (session 2a) ------------------------------------------------------------
+local toggles = false
+add_method(work_td, "isFavorite", "System.Boolean", {}, function(self) return self.values.FreeVal4 ~= 0 end)
+add_method(work_td, "changeFavorite", "System.Void", { "System.Boolean" }, function(self, want)
+    if toggles then want = self.values.FreeVal4 == 0 end
+    self.values.FreeVal4 = want and 1 or 0
+end)
+dofile(PROJECT_ROOT .. "/dev/star-test/reframework/autorun/BulkSellStarTest.lua")
+local star_ui = env.callbacks.draw_ui
+local function star_run()
+    env.pressed["Star test"] = true
+    env.texts = {}
+    star_ui()
+    frames()
+    env.texts = {}
+    star_ui()
+end
+env.put_raw("BulkSellProbe/star_target.json", "target", { box = 0, fingerprint = "189:1001:0:0:1003" })
+star_run()
+local star = assert(written("BulkSellProbe/star_test_"), "star test written")
+eq(star.behaviour, "sets", "setter recognised")
+eq(star.steps[5].star, true, "starred at the end")
+eq(star.other_changes, "none", "nothing else changed")
+eq(items[1].values.FreeVal4, 1, "target starred")
+items[1].values.FreeVal4 = 0
+toggles = true
+star_run()
+star = written("BulkSellProbe/star_test_")
+eq(star.behaviour, "other", "toggle recognised")
+items[1].values.FreeVal4 = 0
+toggles = false
+local writes = #env.written
+env.put_raw("BulkSellProbe/star_target.json", "target2", { box = 0, fingerprint = "189:9999:0:0:1003" })
+star_run()
+assert(env.has_text("FAILED: box 0 holds 189:1001:0:0:1003, not 189:9999:0:0:1003; nothing changed"), "wrong target refused")
+eq(#env.written, writes, "nothing written for a wrong target")
+eq(items[1].values.FreeVal4, 0, "no star for a wrong target")
+full_screen = true
+env.put_raw("BulkSellProbe/star_target.json", "target", { box = 0, fingerprint = "189:1001:0:0:1003" })
+star_run()
+assert(env.has_text("not now: close the game menu first"), "waits for the menu")
+full_screen = false
+
 print("dev script tests passed")

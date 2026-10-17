@@ -693,6 +693,28 @@ env.raw[SIDECAR_B] = nil
 rescan()
 assert(not env.has("could not be read"), "unblocked once the file is gone")
 
+-- Debug files: a plan dump with string keys only (so it reads back as written) and a timing line.
+env.draw(nil, { ["Write debug files (for bug reports)##BulkSellDebug"] = true })
+env.draw(nil, { [KEEP] = 7 })
+frames()
+local dump
+for _, w in ipairs(env.written) do
+    if w.path:find("^BulkSell/debug/plan_") then dump = w.data end
+end
+assert(dump, "plan dump written")
+eq(dump.options.mode, "best", "dump options")
+for _, map in ipairs({ dump.options.keep_skills, dump.options.picks, dump.verdicts, dump.preview.best }) do
+    for key in pairs(map) do eq(type(key), "string", "dump keys are strings") end
+end
+eq(dump.verdicts["4"].action, T.state.scan.verdicts[4].action, "dump verdict")
+eq(#dump.charms, #T.state.scan.charms, "dump charms")
+local timing = false
+for _, line in ipairs(env.logs) do
+    if line:find("analyse done in %d+ frames") then timing = true end
+end
+assert(timing, "timing line logged")
+env.draw(nil, { ["Write debug files (for bug reports)##BulkSellDebug"] = false })
+
 eq(env.load_file_calls, 0, "no json.load_file, so no '[JSON] Failed to load file' log lines")
 
 local expected_errors = { "Zenny changed by 0", "sale price does not match", "does not match the plan" }
