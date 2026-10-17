@@ -45,8 +45,8 @@ local EN = {
 
     -- Summary
     summary_line = "Sell %d · keep %d · about %s z · box after the sale %s / %s",
-    summary_detail = "Duplicates %d · covered %d · unique %d · your picks %d (sell %d / keep %d) · protected %d · "
-        .. "R5 %d  R6 %d  R7 %d  R8 %d",
+    summary_detail = "Duplicates %d · covered %d · unique %d · your picks %d (sell %d / keep %d) · protected %d",
+    summary_rarity = "To sell by rarity: R5 %d · R6 %d · R7 %d · R8 %d",
     promise_best = "Your best %d for every skill and slot shape stay. No skill level leaves your box.",
     promise_covered = "Only duplicates and covered talismans are sold. No skill level leaves your box.",
     warn_losses = "%d planned sales lower a skill or remove a slot shape (listed when you press Sell).",

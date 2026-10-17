@@ -351,8 +351,8 @@ local function draw_summary(state)
         cap and cap.used_after_sale or "?", cap and cap.total or "?"))
     local r = summary.by_rarity
     say(T("summary_detail", reasons.duplicate or 0, reasons.dominated or 0, summary.unique_rule,
-        totals.pick_sell + totals.pick_keep, totals.pick_sell, totals.pick_keep, reasons.protected or 0,
-        r[5] or 0, r[6] or 0, r[7] or 0, r[8] or 0))
+        totals.pick_sell + totals.pick_keep, totals.pick_sell, totals.pick_keep, reasons.protected or 0))
+    if summary.sell > 0 then imgui.text(T("summary_rarity", r[5] or 0, r[6] or 0, r[7] or 0, r[8] or 0)) end
     local settings = scan.settings
     if totals.losses > 0 then
         say(T("warn_losses", totals.losses), YELLOW)
