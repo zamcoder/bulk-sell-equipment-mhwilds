@@ -18,6 +18,23 @@ This version sells [b]appraised talismans only[/b] (Unknown / Historical / Secre
 [*][b]Every slot shape gets a ranking too[/b] (A3, A2 A1, W1 A1 A1, ...): the talismans that can hold it, by the strength of all their skills, then their slots. [b]The top N of every slot shape stay.[/b]
 [*][b]The rest is sold[/b] if it is unique and within your rarity limit, unless it has an Always keep skill.
 [/list]
+[b]Example: the 11 talismans with Poison Resistance in a real box, in ranking order[/b]
+[code]
+ #  Talisman                                                  Slots     Best 10  Best 5  Best 3
+ 1  R8 Attack Boost 3, Poison Resistance 3                    W1 A1 A1  Keep     Keep    Keep
+ 2  R7 Critical Eye 3, Poison Resistance 3                    A1 A1     Keep     Keep    Keep
+ 3  R7 Poison Attack 3, Poison Resistance 3                   A1 A1     Keep     Keep    Keep
+ 4  R7 Blast Attack 3, Poison Resistance 3                    A1        Keep     Keep    Sell
+ 5  R6 Focus 2, Poison Resistance 2, Survival Expert 2        A2 A1     Keep     Keep    Sell
+ 6  R7 Attack Boost 3, Poison Resistance 2, Divine Blessing 1 A1 A1     Keep     Sell    Sell
+ 7  R7 Sleep Attack 3, Poison Resistance 2, Intimidator 1     A2        Keep     Sell    Sell
+ 8  R6 Exhaust Func. 1, Resentment 1, Poison Resistance 2     A1        Keep     Sell    Sell
+ 9  R8 Critical Eye 3, Counterstrike 1, Poison Resistance 1   W1 A1     Keep     Sell    Sell
+10  R7 Critical Status 3, Wide-Range 3, Poison Resistance 1   A2        Keep     Sell    Sell
+11  R7 Spread/Power Shots 1, Maximum Might 1, Poison Resist. 1 A2       Keep*    Sell    Sell
+[/code]
+Level 3 comes before level 2; at the same level, bigger slots win (1 beats 2-4 with W1 A1 A1), then more slots (6 beats 7), then stronger other skills (10 beats 11). * Number 11 is outside the top 10 for Poison Resistance but number 6 for Spread/Power Shots, so best 10 keeps it for that skill. A talisman is only sold when it is outside the top N for [b]every[/b] one of its skills and for its slot shape. With best 3, your three Poison Resistance 3 talismans with the most slots stay, so Poison Resistance 3 never leaves your box.
+
 So the number 1 of every skill and every slot shape always stays: [b]your best level of every skill never goes down[/b], and rare skills (on fewer than N talismans) stay. A good talisman can still be sold when better ones exist for every one of its skills; its Why text shows how close it came, for example "Not in your best 3 · closest Item Prolonger #10 of 12". Kept rows say why they stay: "Ambush #1 of 21", "Slot shape A3 #2 of 18". A smaller N sells more; selling in steps (best 10, then 5, then 3) lets you check the list each time.
 
 Every Keep option shows how many talismans it sells and for how much before you choose it. Every row says why: "Same as #1032 (kept)", "Covered by #875 …", "Not in your best 3 · closest Item Prolonger #10 of 12", "Ambush #1 of 21". You get the game's own price (1,500 / 3,000 / 4,500 / 8,000 z for rarity 5 / 6 / 7 / 8). Every run writes a JSON receipt.

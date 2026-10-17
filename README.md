@@ -33,6 +33,30 @@ The mod goes through these steps, in this order:
 4. **Every slot shape gets a ranking too.** For each slot layout in your box (for example A3, A2 A1 or W1 A1 A1), the talismans whose slots can hold it are ordered by the strength of all their skills, then by their slots. **The top N of every slot shape stay**, so your best A3 talismans are never all sold for their skills.
 5. **The rest is sold if it is unique and within your rarity limit.** A talisman that is in nobody's top N, for none of its skills and not for its slot shape, is sold. Exceptions: its rarity is above your limit, or it has an **Always keep** skill at the level you chose.
 
+### Example: one skill, ranked
+
+These are the 11 talismans with **Poison Resistance** in a real box of 1,029 talismans, in their ranking order. "Keep" means it stays with that Keep option; "Sell" means it is sold (it was outside the top N of this skill, of its other skills and of its slot shape).
+
+| # | Talisman | Slots | Why this place | Best 10 | Best 5 | Best 3 |
+|---|---|---|---|---|---|---|
+| 1 | R8 Attack Boost 3, **Poison Resistance 3** | W1 A1 A1 | level 3, the biggest slots (3 in total) | Keep | Keep | Keep |
+| 2 | R7 Critical Eye 3, **Poison Resistance 3** | A1 A1 | level 3, slots 2 | Keep | Keep | Keep |
+| 3 | R7 Poison Attack 3, **Poison Resistance 3** | A1 A1 | the same as #2 in every key; a fixed content order decides | Keep | Keep | Keep |
+| 4 | R7 Blast Attack 3, **Poison Resistance 3** | A1 | level 3, but slots 1 | Keep | Keep | Sell |
+| 5 | R6 Focus 2, **Poison Resistance 2**, Survival Expert 2 | A2 A1 | level 2, slots 3 | Keep | Keep | Sell |
+| 6 | R7 Attack Boost 3, **Poison Resistance 2**, Divine Blessing 1 | A1 A1 | level 2, slots 2 in two slots | Keep | Sell | Sell |
+| 7 | R7 Sleep Attack 3, **Poison Resistance 2**, Intimidator 1 | A2 | level 2, slots 2 in one slot | Keep | Sell | Sell |
+| 8 | R6 Exhaust Functionality 1, Resentment 1, **Poison Resistance 2** | A1 | level 2, slots 1 | Keep | Sell | Sell |
+| 9 | R8 Critical Eye 3, Counterstrike 1, **Poison Resistance 1** | W1 A1 | level 1, slots 2 in two slots | Keep | Sell | Sell |
+| 10 | R7 Critical Status 3, Wide-Range 3, **Poison Resistance 1** | A2 | level 1, slots 2 in one slot, strong other skills | Keep | Sell | Sell |
+| 11 | R7 Spread/Power Shots 1, Maximum Might 1, **Poison Resistance 1** | A2 | level 1, slots 2 in one slot, weaker other skills | Keep¹ | Sell | Sell |
+
+¹ Number 11 is outside the top 10 for Poison Resistance, but it is number 6 for Spread/Power Shots, so best 10 keeps it for that skill.
+
+- With **best 3**, your three Poison Resistance 3 talismans with the most slots stay, so Poison Resistance 3 is still in your box.
+- The talismans sold under best 3 or best 5 are sold because they are outside the top N **for every one of their skills and for their slot shape**, not only for Poison Resistance. Number 6 has Attack Boost 3, for example, but at least 5 Attack Boost talismans rank above it.
+- **Best 1** would keep only number 1 here, plus any talisman that is number 1 for another of its skills or its slot shape.
+
 What this means in practice:
 
 - **Your best level of every skill stays**, because the number 1 of each ranking always stays. The same goes for slot shapes.
