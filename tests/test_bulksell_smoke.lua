@@ -991,6 +991,19 @@ frames(260)
 draw_toast()
 eq(#env.texts, 0, "said once")
 
+-- The test message shows once the REFramework menu closes.
+env.drawing_ui = true
+frames(1)
+env.draw({ "Show a test message##BulkSellToastTest" })
+env.draw()
+assert(env.has("Close the REFramework menu (Insert) to see it."), "test message hint")
+env.drawing_ui = false
+frames(1)
+draw_toast()
+assert(env.has("This is how Bulk Sell tells you about new items"), "test message")
+env.advance(13)
+draw_toast()
+
 -- Auto-clean off: nothing touches the game while the menu is closed.
 env.drawing_ui = true
 frames(2)

@@ -80,6 +80,7 @@ local state = {
     watch = { next_at = 0, free = nil, arrived = 0, guards = {}, capacity = "ok" },   -- auto-clean watch
     toast = nil,          -- { text, until }: a message shown while the REFramework menu is closed
     toast_pending = nil,  -- a message held back while the quest result screen is up
+    toast_on_close = nil, -- a message to show as soon as the REFramework menu closes (test button)
     clipboard = nil,      -- text the UI puts on the clipboard in its next frame
     sale = nil,           -- progress and result of the last sale
     stop_requested = false,
@@ -813,6 +814,10 @@ local actions = {
     clear_arrivals = function()
         state.arrivals = {}
     end,
+    -- Shows what a message looks like, once the REFramework menu is closed.
+    test_toast = function()
+        state.toast_on_close = T("toast_test")
+    end,
 
     -- Skills panel: one skill, the skills a Find shows, Undo and Reset all.
     set_skill = function(id, pref)
@@ -860,17 +865,21 @@ local actions = {
     end,
 }
 
+local function show_toast(text)
+    state.toast = { text = text, shown_at = os.clock(), until_at = os.clock() + state.settings.toast_seconds }
+end
+
 -- The REFramework menu was closed: the player can use the game again, so the box may change.
 local function on_menu_closed()
+    if state.toast_on_close then
+        show_toast(state.toast_on_close)
+        state.toast_on_close = nil
+    end
     if state.scan then
         state.stale = true
         withdraw_confirm()
     end
     if state.job and not STOPS_ITSELF[state.job_name] then cancel_job() end
-end
-
-local function show_toast(text)
-    state.toast = { text = text, until_at = os.clock() + state.settings.toast_seconds }
 end
 
 -- Auto-clean watch, opt-in: while the REFramework menu is closed, look at the number of free
@@ -993,7 +1002,7 @@ re.on_pre_application_entry("UpdateBehavior", function()
 end)
 
 re.on_draw_ui(function()
-    ui.menu(state)
+    ui.menu(state, actions)
     ui.window(state, actions)
 end)
 

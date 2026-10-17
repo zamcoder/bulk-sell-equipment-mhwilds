@@ -758,7 +758,7 @@ local function draw_body(state, actions)
     draw_table(state, actions, scan, rows)
 end
 
-function ui.menu(state)
+function ui.menu(state, actions)
     if imgui.tree_node("Bulk Sell Equipment") then
         local ok, err = pcall(function()
             imgui.text(T("version", state.version))
@@ -770,6 +770,8 @@ function ui.menu(state)
             if state.settings.auto_clean then
                 local cap_changed, cap = imgui.checkbox(T("capacity_toast") .. "##BulkSellCapacityToast", state.settings.capacity_toast)
                 if cap_changed then state.settings.capacity_toast = cap end
+                if actions and imgui.button(T("toast_test_button") .. "##BulkSellToastTest") then actions.test_toast() end
+                if state.toast_on_close then imgui.text(T("toast_test_hint")) end
             end
             local changed, debug = imgui.checkbox(T("debug_files") .. "##BulkSellDebug", state.settings.debug)
             if changed then state.settings.debug = debug end
@@ -797,17 +799,78 @@ function ui.window(state, actions)
     imgui.end_window()
 end
 
--- A short message in a corner while the REFramework menu is closed. It takes no input and
--- only reads Lua state (it is drawn from re.on_frame).
+-- A short message on the right of the screen while the REFramework menu is closed. It takes
+-- no input and only reads Lua state (it is drawn from re.on_frame).
+--
+-- With REFramework's draw API it looks like the game's own notices: thin lines above and below
+-- with small diamonds, a bold white title and the text with a shadow, fading in and out.
+-- Without it, a small window with a gold edge is shown instead.
 local TOAST_WRAP = 60
-local TOAST_STYLE = {   -- ImGuiCol index, RGBA: a dark panel with a gold edge, like the game's own notices
+local TOAST_STYLE = {   -- ImGuiCol index, RGBA: a dark panel with a gold edge
     { 2, 0.06, 0.05, 0.04, 0.88 },   -- WindowBg
     { 5, 0.84, 0.69, 0.35, 0.90 },   -- Border
 }
 local TOAST_GOLD = 0xFF6CC8E8
 
--- Where the message goes: the right side of the screen, a third of the way down, when the
--- screen size is known; otherwise the top left.
+-- Colours of the game-style message, 0xAABBGGRR as ImGui takes them.
+local NOTICE = {
+    width = 470, right = 34, top = 0.30, pad = 9, indent = 30, wrap = 44,   -- pixels at 1080p, top as a share of the height
+    text = 0xFFFFFFFF, shadow = 0xD0000000, line = 0xFFC8D0D0, band = 0x60000000, icon = 0xFF6CC8E8,
+    fade_in = 0.25, fade_out = 0.6,
+}
+
+-- The default font at a bigger size, like the game's notice text (falls back to the normal font).
+local notice_font
+if has("load_font") then
+    local ok, font = pcall(imgui.load_font, nil, 22)
+    if ok and font then notice_font = font end
+end
+
+local function with_alpha(color, alpha)
+    local a = math.floor(((color >> 24) & 0xFF) * alpha)
+    return (color & 0x00FFFFFF) | (a << 24)
+end
+
+local function diamond(x, y, r, color)
+    draw.filled_quad(x, y - r, x + r, y, x, y + r, x - r, y, color)
+end
+
+local function shadowed(text, x, y, color, alpha, bold)
+    draw.text(text, x + 1, y + 1, with_alpha(NOTICE.shadow, alpha))
+    draw.text(text, x, y, with_alpha(color, alpha))
+    if bold then draw.text(text, x + 1, y, with_alpha(color, alpha)) end
+end
+
+local function draw_notice(toast, now)
+    local size = imgui.get_display_size()
+    if not size or not size.x or size.x <= 0 then return false end
+    local scale = size.y / 1080
+    local alpha = math.min(1, (now - (toast.shown_at or now)) / NOTICE.fade_in, (toast.until_at - now) / NOTICE.fade_out)
+    alpha = math.max(0, alpha)
+    local pushed = notice_font ~= nil and pcall(imgui.push_font, notice_font)
+    local ok = pcall(function()
+        local line_h = (has("calc_text_size") and imgui.calc_text_size("Ag").y or 18) + 2 * scale
+        local body = wrap_at(toast.text, NOTICE.wrap)
+        local x1 = size.x - NOTICE.right * scale
+        local x0 = x1 - NOTICE.width * scale
+        local y0 = size.y * NOTICE.top
+        local h = NOTICE.pad * scale * 2 + line_h * (1 + #body)
+        local y1 = y0 + h
+        draw.filled_rect(x0, y0, x1 - x0, h, with_alpha(NOTICE.band, alpha))
+        for _, y in ipairs({ y0, y1 }) do
+            draw.line(x0 + 6 * scale, y, x1, y, with_alpha(NOTICE.line, alpha))
+            diamond(x0, y, 3.5 * scale, with_alpha(NOTICE.line, alpha))
+        end
+        local tx = x0 + NOTICE.indent * scale
+        local ty = y0 + NOTICE.pad * scale
+        diamond(x0 + 14 * scale, ty + line_h / 2, 5 * scale, with_alpha(NOTICE.icon, alpha))
+        shadowed(T("toast_title"), tx, ty, NOTICE.text, alpha, true)
+        for i, line in ipairs(body) do shadowed(line, tx, ty + line_h * i, NOTICE.text, alpha, false) end
+    end)
+    if pushed then imgui.pop_font() end
+    return ok
+end
+
 local function place_toast()
     local size = has("get_display_size") and imgui.get_display_size()
     if size and size.x and size.x > 0 then
@@ -817,14 +880,7 @@ local function place_toast()
     end
 end
 
-function ui.toast(state)
-    local toast = state.toast
-    if not toast then return end
-    if os.clock() > toast.until_at then
-        state.toast = nil
-        return
-    end
-    if reframework:is_drawing_ui() then return end
+local function draw_window_toast(toast)
     pcall(place_toast)
     -- Colours are pushed one by one and popped exactly as often, or ImGui would break.
     local pushed = 0
@@ -840,6 +896,20 @@ function ui.toast(state)
     end)
     imgui.end_window()
     if pushed > 0 then imgui.pop_style_color(pushed) end
+end
+
+function ui.toast(state)
+    local toast = state.toast
+    if not toast then return end
+    local now = os.clock()
+    if now > toast.until_at then
+        state.toast = nil
+        return
+    end
+    if reframework:is_drawing_ui() then return end
+    local game_style = type(draw) == "table" and type(draw.text) == "function" and type(draw.line) == "function"
+        and type(draw.filled_quad) == "function" and type(draw.filled_rect) == "function" and has("get_display_size")
+    if not (game_style and draw_notice(toast, now)) then draw_window_toast(toast) end
 end
 
 -- Exposed for tests.
