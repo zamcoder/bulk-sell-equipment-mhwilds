@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.1
+
+Know what the new talismans are worth, without opening the menu.
+
+**New**
+- **Automatic scan** (part of the auto-clean watch, on as soon as the watch is on): after new items arrive, Bulk Sell waits until nothing new came in for 3 seconds and the game has been calm for 5 seconds: no quest, no quest result screen, no game menu, no saving. Then it reads the box and tells you on the right of the screen: "2 new talismans can be sold (4,500 z). Open Bulk Sell (Insert) to review." It only reads; nothing is sold until you click Sell and confirm. Untick **Then scan by itself and tell me what can be sold** to keep only the item count.
+- **By default only duplicates and covered talismans count** in that message. Tick **Count unique talismans in that message too** to count unique ones as well. A unique talisman that arrived while the game runs always asks for the unique tick again, even if you gave it before.
+- **Tip under the New arrivals line:** star the talismans you crafted on purpose, so they never show up as something to sell.
+
+**Other changes**
+- If the game cannot tell whether you are in a quest (for example after a game update), the automatic scan waits and the menu says "Automatic scan paused". The item count still works.
+- A game menu that opens during the automatic scan stops it; it is tried again when the game is calm.
+
 ## 0.4.0
 
 Know when new talismans arrive.

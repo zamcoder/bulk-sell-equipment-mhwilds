@@ -170,8 +170,29 @@ Careful: importing **replaces** the whole talisman list on the site. **Save CSV*
    > 3 new items in your Equipment Box since your last scan. Open Bulk Sell (Insert) to check.
 
    It waits until the quest result screen is gone, you can play on while it shows, and it never sells anything. Want to see it first? Click **Show a test message** and close the REFramework menu.
-3. Press **Insert**. The window scans again by itself and shows "3 new talismans since you last cleared them." Click **Show new** to see only those.
-4. Sell what you do not need with **Sell the N shown**, or click **Clear** to forget them.
+3. A few seconds later, when the game is calm (no quest, no result screen, no game menu, no saving), the mod scans by itself and a second message tells you what the new talismans are worth:
+   > **Bulk Sell**
+   > 2 new talismans can be sold (4,500 z). Open Bulk Sell (Insert) to review.
+
+   Or, when your rules keep all of them: "3 new talismans arrived; with your settings none of them is sold."
+4. Press **Insert**. The window shows "3 new talismans since you last cleared them." Click **Show new** to see only those.
+5. Sell what you do not need with **Sell the N shown**, or click **Clear** to forget them.
+
+Example: you finish a quest and get 3 talismans. One is a copy of a talisman you keep, one is covered by a better one, one is unique.
+
+| Talisman | What it is | Counted in "can be sold"? |
+|---|---|---|
+| R5 Attack Boost 1 | the same as one you keep (duplicate) | yes |
+| R6 Weakness Exploit 1, A1 | a talisman you keep has Weakness Exploit 2, A1 (covered) | yes |
+| R7 Burst 1, Ambush 1 | no identical or better talisman (unique) | only with **Count unique talismans in that message too** |
+
+So the message says "2 new talismans can be sold". Selling the unique one too always asks for the unique tick, because it is new this session.
+
+Options, under **Tell me about new items...**:
+- **Then scan by itself and tell me what can be sold**: on by default. Untick it to get only the item count.
+- **Count unique talismans in that message too**: off by default.
+
+If the menu says **Automatic scan paused**, the game could not tell whether you are in a quest (for example after a game update). The item count still works; press Insert to scan yourself.
 
 Tip: star the talismans you crafted on purpose, so they never show up as something to sell.
 

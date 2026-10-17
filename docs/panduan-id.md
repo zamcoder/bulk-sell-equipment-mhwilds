@@ -172,8 +172,29 @@ Hati-hati: import **mengganti** seluruh daftar talisman di situs itu. Kalau mau 
    > 3 new items in your Equipment Box since your last scan. Open Bulk Sell (Insert) to check.
 
    Pesan ini menunggu sampai layar hasil quest selesai. Kamu tetap bisa main seperti biasa selama pesan tampil, dan pesan ini tidak pernah menjual apa pun. Mau lihat contohnya dulu? Klik **Show a test message**, lalu tutup menu REFramework.
-3. Tekan **Insert**. Window akan scan ulang sendiri, lalu menampilkan "3 new talismans since you last cleared them." Klik **Show new** untuk melihat hanya talisman-talisman baru itu.
-4. Jual yang tidak kamu butuhkan dengan **Sell the N shown**, atau klik **Clear** kalau mau mengabaikannya.
+3. Beberapa detik kemudian, saat game sedang tenang (tidak di quest, tidak di layar hasil quest, tidak ada menu game, tidak sedang menyimpan), mod scan sendiri. Lalu muncul pesan kedua yang memberi tahu berapa talisman baru yang bisa dijual:
+   > **Bulk Sell**
+   > 2 new talismans can be sold (4,500 z). Open Bulk Sell (Insert) to review.
+
+   Artinya: 2 talisman baru bisa dijual, totalnya 4.500 z. Kalau aturanmu menyimpan semuanya, pesannya: "3 new talismans arrived; with your settings none of them is sold."
+4. Tekan **Insert**. Window menampilkan "3 new talismans since you last cleared them." Klik **Show new** untuk melihat hanya talisman-talisman baru itu.
+5. Jual yang tidak kamu butuhkan dengan **Sell the N shown**, atau klik **Clear** kalau mau mengabaikannya.
+
+Contoh: kamu selesai quest dan dapat 3 talisman. Satu sama persis dengan talisman yang kamu simpan, satu kalah dari talisman yang lebih bagus, satu unik.
+
+| Talisman | Jenisnya | Dihitung di "can be sold"? |
+|---|---|---|
+| R5 Attack Boost 1 | sama persis dengan yang kamu simpan (duplikat) | ya |
+| R6 Weakness Exploit 1, A1 | kamu punya Weakness Exploit 2, A1 (covered, kalah) | ya |
+| R7 Burst 1, Ambush 1 | tidak ada yang sama atau lebih bagus (unik) | hanya kalau **Count unique talismans in that message too** dicentang |
+
+Jadi pesannya "2 new talismans can be sold". Kalau kamu juga mau menjual yang unik, konfirmasi selalu meminta centang unik, karena talisman itu baru datang di sesi ini.
+
+Pilihan di bawah **Tell me about new items...**:
+- **Then scan by itself and tell me what can be sold**: aktif dari awal. Hilangkan centangnya kalau kamu cuma mau jumlah barang baru.
+- **Count unique talismans in that message too**: mati dari awal.
+
+Kalau di menu muncul **Automatic scan paused**, artinya game tidak bisa memberi tahu apakah kamu sedang di quest (misalnya setelah update game). Jumlah barang baru tetap muncul; tekan Insert untuk scan sendiri.
 
 Tips: beri bintang pada talisman yang sengaja kamu buat (crafting), supaya tidak pernah muncul sebagai talisman yang bisa dijual.
 
