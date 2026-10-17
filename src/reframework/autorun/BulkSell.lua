@@ -34,8 +34,10 @@ local MAX_KEPT_FOR = 10          -- refs listed per receipt entry
 local SKILLS_CONFIRM = 10        -- "Set shown" on more skills than this asks first
 local EXPORT_DIR = "BulkSell/export/"
 local WATCH_SECONDS = 5          -- auto-clean: how often the box is looked at while the menu is closed
+local QUIET_SECONDS = 3          -- automatic scan: no new item for this long...
+local CLEAN_SECONDS = 5          -- ...and no quest, result screen, menu or save for this long
 -- Jobs that change the game finish on their own (and write their records) when the menu closes.
-local STOPS_ITSELF = { sell = true, star = true }
+local STOPS_ITSELF = { sell = true, star = true, autoscan = true }
 -- Name languages for the wiki-db export: label key, via.Language value, file and site tag.
 local EXPORT_LANGUAGES = {
     { "lang_game", nil, "game" }, { "lang_en", 1, "en" }, { "lang_ja", 0, "ja" }, { "lang_ko", 11, "ko" },
@@ -77,7 +79,10 @@ local state = {
     seen = nil,           -- box contents at the last scan, for new arrivals
     arrivals = {},        -- [box] = fingerprint of talismans that arrived since they were last cleared
     free_at_scan = nil,   -- free box entries at the last scan
-    watch = { next_at = 0, free = nil, arrived = 0, guards = {}, capacity = "ok" },   -- auto-clean watch
+    watch = { next_at = 0, free = nil, arrived = 0, guards = {}, capacity = "ok",   -- auto-clean watch
+        pending = false, last_drop_at = nil, clean_since = nil, paused = nil },
+    session_arrivals = {},   -- [box] = fingerprint of talismans that arrived while the game runs
+    last_arrivals = {},      -- boxes that were new at the last scan
     toast = nil,          -- { text, until }: a message shown while the REFramework menu is closed
     toast_pending = nil,  -- a message held back while the quest result screen is up
     toast_on_close = nil, -- a message to show as soon as the REFramework menu closes (test button)
@@ -310,7 +315,8 @@ local function scan_job()
     end
     -- New arrivals: what holds another talisman than at the last scan. They stay listed until
     -- the player clears them, or the talisman is gone.
-    for _, key in ipairs(seen.update(state.seen, charms)) do state.arrivals[key] = true end
+    state.last_arrivals = seen.update(state.seen, charms)
+    for _, key in ipairs(state.last_arrivals) do state.arrivals[key] = true end
     local by_key = {}
     for _, charm in ipairs(charms) do by_key[charm.key] = charm end
     for key, fp in pairs(state.arrivals) do
@@ -319,6 +325,7 @@ local function scan_job()
             state.arrivals[key] = nil
         elseif fp == true then
             state.arrivals[key] = charm.fingerprint
+            state.session_arrivals[key] = charm.fingerprint
         elseif charm.fingerprint ~= fp then
             state.arrivals[key] = nil
         end
@@ -333,6 +340,7 @@ local function scan_job()
     for _, key in ipairs(stars.stale_keys(state.stars, charms)) do stars.forget(state.stars, key) end
     save_stars()
     analyse(charms, stats, new_count)
+    state.watch.pending = false   -- a finished scan makes the automatic one unneeded
 end
 
 local function cheapest(list)
@@ -708,6 +716,11 @@ local actions = {
         end
         local drops, shapes = confirm_losses(scan, chosen, selling)
         local ack = state.unique_ack
+        local fresh_unique = false   -- a unique talisman that arrived while the game runs: ask again
+        for _, charm in ipairs(chosen) do
+            local v = scan.verdicts[charm.key]
+            if v.unique and v.reason == "rule" and state.session_arrivals[charm.key] == charm.fingerprint then fresh_unique = true end
+        end
         state.notice = nil
         state.confirm = {
             revision = scan.revision,
@@ -723,7 +736,7 @@ local actions = {
             shapes = shapes,
             rules_hash = scan.rules_hash,
             trigger = trigger,
-            need_unique = unique_rule > 0 and not (ack and ack.hash == scan.rules_hash and unique_rule <= ack.count),
+            need_unique = unique_rule > 0 and (fresh_unique or not (ack and ack.hash == scan.rules_hash and unique_rule <= ack.count)),
             need_loss = #drops > 0 or #shapes > 0,
             ack_unique = false,
             ack_loss = false,
@@ -882,6 +895,30 @@ local function on_menu_closed()
     if state.job and not STOPS_ITSELF[state.job_name] then cancel_job() end
 end
 
+-- After an automatic scan: how many of the new talismans the plan sells. Duplicates and
+-- covered ones count; unique ones only with "Count unique talismans too".
+local function announce_arrivals()
+    local scan = state.scan
+    local n, sellable, zenny = 0, 0, 0
+    for _, key in ipairs(state.last_arrivals or {}) do
+        local charm, v = scan.by_key[key], scan.verdicts[key]
+        if charm and v then
+            n = n + 1
+            local class = explain.class(v)
+            if v.action == "sell" and (class == "safe" or (class == "unique" and state.settings.auto_clean_unique)) then
+                sellable = sellable + 1
+                zenny = zenny + (charm.price or 0)
+            end
+        end
+    end
+    if n == 0 then return end
+    if sellable > 0 then
+        show_toast(lang.N("toast_can_sell", sellable, ui._thousands(zenny)))
+    else
+        show_toast(lang.N("toast_none_to_sell", n))
+    end
+end
+
 -- Auto-clean watch, opt-in: while the REFramework menu is closed, look at the number of free
 -- box entries every few seconds (the only game calls then), log changes of the quest and save
 -- state, and tell the player about new items or a nearly full box. It never sells anything.
@@ -901,17 +938,36 @@ local function watch_box()
         show_toast(state.toast_pending)
         state.toast_pending = nil
     end
+    -- The automatic scan waits for: no quest, no result screen, no menu, no save (all known).
+    local clean = false
+    w.paused = nil
+    if state.settings.auto_clean_scan then
+        local unknown = guards.quest_active == nil or guards.quest_playing == nil or guards.result_flow == nil
+        w.paused = unknown and T("auto_scan_paused") or nil
+        clean = not unknown and not guards.quest_active and not guards.quest_playing and not guards.result_flow
+            and not guards.save_flow and not guards.show_saving and game.menu_block_reason() == nil
+    end
+    if clean then w.clean_since = w.clean_since or now else w.clean_since = nil end
     local free, total = game.box_free()
     if not free then return end
     -- Every drop counts: the Melding Pot first takes talismans out (more free entries) and
     -- then puts new ones in, so the net change since the scan can be 0.
     if w.free and free < w.free then
         w.arrived = w.arrived + (w.free - free)
+        w.pending, w.last_drop_at = true, now
         local text = lang.N("toast_new_items", w.arrived)
         if guards.result_flow ~= true then show_toast(text) else state.toast_pending = text end
         if state.scan then state.stale = true end
     end
     w.free = free
+    if w.pending and clean and now - w.clean_since >= CLEAN_SECONDS - 0.01
+        and now - w.last_drop_at >= QUIET_SECONDS and not state.job and not state.confirm and state.scan then
+        w.pending = false
+        start("autoscan", function()
+            scan_job()
+            announce_arrivals()
+        end)
+    end
     if state.settings.capacity_toast then
         local cap = capacity.of(total - free, total)
         local level = cap and cap.level or "ok"
@@ -967,6 +1023,11 @@ re.on_pre_application_entry("UpdateBehavior", function()
         elseif state.picks and state.picks.dirty and os.clock() - state.picks_saved_at >= PICKS_SAVE_INTERVAL then
             save_picks()
         end
+    end
+    -- An automatic scan stops when a game menu opens; it is tried again later.
+    if state.job_name == "autoscan" and game.menu_block_reason() then
+        cancel_job()
+        state.watch.pending, state.stale = true, true
     end
     local job = state.job
     if not job then return end

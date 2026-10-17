@@ -483,6 +483,7 @@ local function draw_summary(state, actions)
             actions.clear_arrivals()
             view.arrivals, view.arrivals_count = {}, 0
         end
+        imgui.text_colored(T("arrivals_tip"), GREY)
     end
     local change = scan.last_change
     if change and change.count > 0 then
@@ -770,6 +771,13 @@ function ui.menu(state, actions)
             if state.settings.auto_clean then
                 local cap_changed, cap = imgui.checkbox(T("capacity_toast") .. "##BulkSellCapacityToast", state.settings.capacity_toast)
                 if cap_changed then state.settings.capacity_toast = cap end
+                local scan_changed, auto_scan = imgui.checkbox(T("auto_clean_scan") .. "##BulkSellAutoScan", state.settings.auto_clean_scan)
+                if scan_changed then state.settings.auto_clean_scan = auto_scan end
+                if state.settings.auto_clean_scan then
+                    local u_changed, unique = imgui.checkbox(T("auto_clean_unique") .. "##BulkSellAutoUnique", state.settings.auto_clean_unique)
+                    if u_changed then state.settings.auto_clean_unique = unique end
+                    if state.watch and state.watch.paused then imgui.text_colored(state.watch.paused, YELLOW) end
+                end
                 if actions and imgui.button(T("toast_test_button") .. "##BulkSellToastTest") then actions.test_toast() end
                 if state.toast_on_close then imgui.text(T("toast_test_hint")) end
             end

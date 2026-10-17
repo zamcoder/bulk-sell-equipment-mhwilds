@@ -110,7 +110,11 @@ local save = new_object("app.savedata.cUserSaveParam", { _Equip = equip, _BasicD
 
 local saving = false
 local manager_td = new_type("app.SaveDataManager", { parent = "System.Object" })
-add_method(manager_td, "getCurrentUserSaveData", "app.savedata.cUserSaveParam", {}, function() return save end)
+local slow_save_reads = false   -- true: each save read takes 10 ms, so a scan needs more than one frame
+add_method(manager_td, "getCurrentUserSaveData", "app.savedata.cUserSaveParam", {}, function()
+    if slow_save_reads then env.advance(0.01) end
+    return save
+end)
 add_method(manager_td, "get_IsSaveLoadFlowRunning", "System.Boolean", {}, function() return saving end)
 add_method(manager_td, "get_IsShowSaving", "System.Boolean", {}, function() return false end)
 local save_manager = new_object("app.SaveDataManager", { CurrentUserDataIndex = 0 })
@@ -122,7 +126,11 @@ add_method(gui_manager_td, "isOpenFullScreenUI", "System.Boolean", {}, function(
 local result_flow, in_quest = false, false
 add_method(gui_manager_td, "isQuestResultFlowActive", "System.Boolean", {}, function() return result_flow end)
 local mission_td = new_type("app.MissionManager", { parent = "System.Object" })
-add_method(mission_td, "get_IsActiveQuest", "System.Boolean", {}, function() return in_quest end)
+local quest_getter_fails = false   -- true: the quest state cannot be read (a game update)
+add_method(mission_td, "get_IsActiveQuest", "System.Boolean", {}, function()
+    if quest_getter_fails then error("method not found") end
+    return in_quest
+end)
 add_method(mission_td, "get_IsPlayingQuest", "System.Boolean", {}, function() return in_quest end)
 add_method(mission_td, "get_IsQuestResult", "System.Boolean", {}, function() return false end)
 env.singletons["app.MissionManager"] = new_object("app.MissionManager")
@@ -902,6 +910,11 @@ rescan()
 env.draw({ "Clear##BulkSellClearNew" })
 env.draw(nil, { ["Tell me about new items while the menu is closed (auto-clean)##BulkSellAutoClean"] = true })
 eq(T.state.settings.auto_clean, true, "auto-clean on")
+local AUTO_SCAN = "Then scan by itself and tell me what can be sold (never during a quest or a menu)##BulkSellAutoScan"
+local AUTO_UNIQUE = "Count unique talismans in that message too##BulkSellAutoUnique"
+eq(T.state.settings.auto_clean_scan, true, "the automatic scan is on by default")
+env.draw(nil, { [AUTO_SCAN] = false })   -- first the messages alone (v0.4.0)
+eq(T.state.settings.auto_clean_scan, false, "automatic scan off")
 env.drawing_ui = false
 frames(1)   -- the first look only takes the baseline
 draw_toast()
@@ -1003,6 +1016,151 @@ draw_toast()
 assert(env.has("This is how Bulk Sell tells you about new items"), "test message")
 env.advance(13)
 draw_toast()
+
+-- The automatic scan (v0.4.1): no new item for 3 s and the game calm for 5 s (no quest,
+-- result screen, menu or save), then it scans and says what the plan sells.
+env.drawing_ui = true
+frames(2)
+env.draw(nil, { [KEEP] = 7, [RARITY] = 8, [AUTO_SCAN] = true,
+    ["Also tell me when the Equipment Box is almost full##BulkSellCapacityToast"] = false })
+frames()
+env.draw()
+eq(T.state.settings.auto_clean_scan, true, "automatic scan on")
+eq(T.state.settings.auto_clean_unique, false, "unique talismans are not counted by default")
+eq(next(T.state.arrivals), nil, "no arrivals listed")
+slow_save_reads = true
+env.drawing_ui = false
+frames(1)
+env.advance(6)
+frames(1)
+local function look() env.advance(5) frames(1) end
+new_talisman(2, 189, { 1001, 0, 0, 1003 })   -- a copy of box 1: duplicate
+new_talisman(9, 190, { 1007, 1005, 0, 0 })   -- R6 Skill7 1, Skill5 1: unique, not the best for either
+look()
+draw_toast()
+assert(env.has("2 new items in your Equipment Box"), "the items message comes first")
+eq(T.state.job, nil, "no scan right after an item came in")
+look()
+eq(T.state.job_name, "autoscan", "scan after 3 s without new items")
+frames()
+eq(T.state.job, nil, "the automatic scan runs while the menu is closed")
+eq(T.state.stale, false, "the plan is fresh")
+eq(T.state.scan.verdicts[2].reason, "duplicate", "box 2 is a duplicate")
+eq(T.state.scan.verdicts[9].reason, "rule", "box 9 is unique and sold by the rule")
+local duplicate_price = T.state.scan.by_key[2].price
+draw_toast()
+assert(env.has("1 new talisman can be sold (" .. require("BulkSell.ui")._thousands(duplicate_price) .. " z)"), "only the duplicate counts by default")
+local scans_done = T.state.scan
+
+-- A unique talisman that came in while the game runs: the unique tick is asked again.
+env.drawing_ui = true
+frames(2)
+env.draw()
+eq(T.state.scan, scans_done, "no rescan when the menu opens after an automatic scan")
+assert(env.has("2 new talismans since you last cleared them."), "both are new arrivals")
+assert(env.has("Tip: star talismans you crafted on purpose"), "star tip")
+T.state.unique_ack = { hash = T.state.scan.rules_hash, count = 99 }
+env.draw({ "Show new##BulkSellShowNew" })
+env.draw({ "Sell the 2 shown##BulkSellShown" })
+env.draw()
+assert(env.has("1 are unique"), "unique line")
+assert(not env.buttons["Yes, sell##BulkSellConfirm"], "the tick is asked again for this session's arrival")
+env.draw({ "Cancel##BulkSellCancel" })
+env.draw(nil, { [AUTO_UNIQUE] = true, ["Show##BulkSellFilter"] = 3 })
+eq(T.state.settings.auto_clean_unique, true, "unique talismans counted")
+
+-- With unique talismans counted; a game menu that opens during the scan stops it, and it is tried again.
+env.drawing_ui = false
+frames(1)
+look()
+new_talisman(0, 190, { 1011, 1005, 0, 0 })   -- R6 Skill11 1, Skill5 1: unique
+look()
+look()
+eq(T.state.job_name, "autoscan", "scan started")
+full_screen = true
+frames(1)
+eq(T.state.job, nil, "a game menu stops the automatic scan")
+frames(300)
+eq(T.state.job, nil, "no scan while the game menu is open")
+full_screen = false
+look()
+look()
+eq(T.state.job_name, "autoscan", "tried again once the game is calm")
+frames()
+draw_toast()
+assert(env.has("1 new talisman can be sold ("), "the unique arrival counted too")
+
+-- The menu opens before the automatic scan: the normal scan there is enough. The box is full,
+-- so box 13 makes room first.
+local function empty_box(index) at(index).values.category, at(index).values.Category_Gender = -1, 141 end
+empty_box(13)
+look()
+new_talisman(13, 190, { 1005, 0, 0, 1000 })
+look()
+env.drawing_ui = true
+frames(2)
+env.draw()
+frames()
+eq(T.state.stale, false, "scanned when the menu opened")
+env.drawing_ui = false
+frames(1)
+local perf_before = T.state.last_perf
+look()
+look()
+eq(T.state.job, nil, "no automatic scan after that")
+eq(T.state.last_perf, perf_before, "no scan ran")
+
+-- No automatic scan during a quest or the result screen.
+empty_box(13)
+look()
+in_quest = true
+new_talisman(13, 189, { 1001, 0, 0, 1003 })
+look()
+look()
+look()
+eq(T.state.job, nil, "no scan during a quest")
+eq(T.state.stale, true, "the plan is stale")
+in_quest, result_flow = false, true
+look()
+look()
+eq(T.state.job, nil, "no scan during the result screen")
+result_flow = false
+look()
+eq(T.state.job, nil, "the game must be calm for 5 s first")
+look()
+eq(T.state.job_name, "autoscan", "scan after the quest")
+frames()
+
+-- Fail-closed: when the quest state cannot be read, the scan waits and the menu says so.
+local PAUSED = "Automatic scan paused: the quest state cannot be read on this game version."
+empty_box(13)
+look()
+quest_getter_fails = true
+new_talisman(13, 190, { 1005, 0, 0, 1000 })
+look()
+look()
+look()
+eq(T.state.job, nil, "no scan without the quest state")
+eq(T.state.watch.paused, PAUSED, "paused")
+draw_toast()
+assert(env.has("1 new item in your Equipment Box"), "the items message still comes")
+quest_getter_fails = false
+local perf_paused = T.state.last_perf
+look()
+look()
+look()
+frames()
+assert(T.state.last_perf ~= perf_paused and T.state.last_perf.name == "autoscan", "scanned once the quest state can be read again")
+eq(T.state.watch.paused, nil, "no longer paused")
+eq(T.state.stale, false, "the plan is fresh again")
+quest_getter_fails = true
+look()
+env.drawing_ui = true
+frames(2)
+env.draw()
+assert(env.has(PAUSED), "paused line in the menu")
+quest_getter_fails = false
+slow_save_reads = false
 
 -- Auto-clean off: nothing touches the game while the menu is closed.
 env.drawing_ui = true

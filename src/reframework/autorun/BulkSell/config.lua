@@ -33,6 +33,8 @@ local DEFAULTS = {
     debug = false,              -- write plan dumps and timing lines for bug reports
     auto_clean = false,         -- watch the box while the REFramework menu is closed and tell about new items
     capacity_toast = false,     -- also tell when the box is almost full
+    auto_clean_scan = true,     -- with the watch on: scan by itself after new items arrive (never in a quest or menu)
+    auto_clean_unique = false,  -- also count unique talismans in that message
     toast_seconds = 12,         -- how long such a message stays
     keep_skills = { _format = MAPS.keep_skills },
     ignore_skills = { _format = MAPS.ignore_skills },
@@ -80,6 +82,8 @@ function config.validate(loaded)
     if type(loaded.debug) == "boolean" then result.debug = loaded.debug end
     if type(loaded.auto_clean) == "boolean" then result.auto_clean = loaded.auto_clean end
     if type(loaded.capacity_toast) == "boolean" then result.capacity_toast = loaded.capacity_toast end
+    if type(loaded.auto_clean_scan) == "boolean" then result.auto_clean_scan = loaded.auto_clean_scan end
+    if type(loaded.auto_clean_unique) == "boolean" then result.auto_clean_unique = loaded.auto_clean_unique end
     result.toast_seconds = integer_in(loaded.toast_seconds, 3, 60) or DEFAULTS.toast_seconds
     if MODES[loaded.mode] then result.mode = loaded.mode end
     result.best_n = integer_in(loaded.best_n, 1, 10) or DEFAULTS.best_n
