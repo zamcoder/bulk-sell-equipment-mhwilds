@@ -4,6 +4,8 @@ A REFramework script that finds the appraised talismans you no longer need and s
 
 > This version sells **appraised talismans** only: Unknown, Historical, Secret and Golden Age Charm (rarity 5–8). It never touches weapons, armor or crafted talismans.
 
+**New here? Read the [beginner's guide](docs/GUIDE.md):** your first sale in 6 steps, which Keep option to choose, how to read the window, and short recipes ("keep one talisman", "ignore resistances", "export to wiki-db"...). Panduan Bahasa Indonesia: [docs/panduan-id.md](docs/panduan-id.md).
+
 ## How it decides
 
 Bulk Sell asks of every appraised talisman: do you still need it?
@@ -86,7 +88,7 @@ What this means in practice:
 - **Ticks per row.** The Sell box of a row overrides the rules for that talisman, and a `*` marks it. Ticks are saved per save slot. **Mark shown** ticks or unticks every row the filter shows, with **Undo**.
 - **Shows every talisman before anything is sold:** its price, the verdict and why. For example, "Same as #1032 (kept)", "Covered by #875 R8 Critical Eye 3, Flayer 1", "Not in your best 3 · closest Item Prolonger #10 of 12" or "Ambush #1 of 21".
 - **Filters:** To sell, To keep, All, Your picks, Unique sales, Changed by last edit, Last of their kind (the only holder of a skill's best level or of a slot shape), plus **Find** (a skill name or `#box`) and rarity checkboxes. A "Last change" line says what your last edit or rescan changed, and the scan line counts new talismans.
-- **Stars:** "Star the N kept", "Star my Keep picks" and "Remove stars Bulk Sell added" use the game's own favorite lock, so what you keep is safe in the game's menus too. Bulk Sell remembers which stars it added and never removes yours.
+- **Stars:** "Star the N kept", "Star my Keep picks" and "Remove stars Bulk Sell added" use the game's own favorite star. Bulk Sell never sells favorites, other mods such as Talisman Analyser skip them too, and the star shows in the game's own lists. Bulk Sell remembers which stars it added and never removes yours.
 - **Export:** "Copy for mhwilds.wiki-db.com" puts your talismans (all, what stays, or only the sales) on the clipboard in the format of the site's Talisman tab, and "Save CSV" writes a spreadsheet. Names can be in the game's language or in English, Japanese, Korean or Chinese.
 - **Melding Pot comparison:** the summary also shows how many Melding Pot points the planned sales would be worth instead of zenny.
 - **Pays the game's own price:** 1,500 / 3,000 / 4,500 / 8,000 z for rarity 5 / 6 / 7 / 8.

@@ -8,7 +8,7 @@ Per-skill control, stars and export.
 - **Skills panel:** for each skill Default, its own Best 1 / 2 / 3 / 5 / 10, Keep all (from a level), or Don't care. It lists how many talismans have each skill, the best level in your box and what stays after the plan (red when the best level would go down). Find, "Set the N shown to" (asks first for more than 10 skills), Undo and Reset all. It replaces the Always keep list; your Always keep skills appear as "Keep all".
 - **Don't care is safe:** when a Don't care skill loses its best level, the green line becomes a yellow warning, and the confirmation lists it in red and needs the loss tick.
 - **Filters** "Changed by last edit" and "Last of their kind"; a **Last change** line (with Show changed) after every edit or rescan; the scan line counts new talismans since the last scan.
-- **Stars:** Star the kept talismans, Star my Keep picks, Remove stars Bulk Sell added. Uses the game's favorite lock; Bulk Sell keeps a list of the stars it added and never removes yours.
+- **Stars:** Star the kept talismans, Star my Keep picks, Remove stars Bulk Sell added. Uses the game's favorite star; Bulk Sell keeps a list of the stars it added and never removes yours.
 - **Export:** Copy for mhwilds.wiki-db.com (clipboard and file) and Save CSV, for all talismans, what stays, or only the sales, with names in the game's language or in English, Japanese, Korean or Chinese.
 - **Melding Pot points** of the planned sales next to their zenny.
 
