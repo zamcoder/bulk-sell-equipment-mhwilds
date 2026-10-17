@@ -3,13 +3,14 @@ Finds the appraised talismans you no longer need and sells them all at once. It 
 
 This version sells [b]appraised talismans only[/b] (Unknown / Historical / Secret / Golden Age Charm, rarity 5-8). Weapons, armor and crafted talismans are never touched.
 
-[size=4][b]What it sells[/b][/size]
+[size=4][b]How it decides[/b][/size]
 [list]
-[*][b]Covered talismans[/b]: a talisman you keep has every skill at the same or a higher level, and slots that fit the same decorations. Weapon and armor slots are compared separately.
-[*][b]Duplicates[/b]: identical copies beyond the one that is kept.
-[*][b]Rarity rule[/b] (optional): everything up to a chosen rarity, except talismans with skills you mark as kept.
+[*][b]Default[/b]: only duplicates, and talismans that a talisman you keep matches or beats on every skill and slot.
+[*][b]More space[/b]: choose [b]Keep the best 3 per skill[/b] (or 10, 5, 2, 1). For every skill and every slot shape, your 3 best talismans stay; every other unique talisman up to your rarity limit is sold. [b]Always keep[/b] skills are never sold as unique.
+[*][b]Your control[/b]: tick or untick any row; your choice beats the rules. [b]Mark shown[/b] ticks every row a filter shows, with Undo.
+[*][b]The promise[/b]: the rules never lower your best level of any skill, and never remove the last talisman that can hold a slot shape. Only your own ticks can, and the confirmation names exactly what you lose.
 [/list]
-Before anything is sold, every talisman is listed with its price, its verdict and the talisman kept instead. You get the game's own price (1,500 / 3,000 / 4,500 / 8,000 z for rarity 5 / 6 / 7 / 8). Every run writes a JSON receipt.
+Every Keep option shows how many talismans it sells and for how much before you choose it. Every row says why: "Same as #1032 (kept)", "Covered by #875 …", "Not in your best 3 · closest Item Prolonger #10 of 12", "Ambush #1 of 21". You get the game's own price (1,500 / 3,000 / 4,500 / 8,000 z for rarity 5 / 6 / 7 / 8). Every run writes a JSON receipt.
 
 [size=4][b]Never sold[/b][/size]
 [list]
@@ -19,7 +20,7 @@ Before anything is sold, every talisman is listed with its price, its verdict an
 [*]Crafted talismans
 [*]Talismans with an RNG Charm Crafting Set/Group bonus
 [/list]
-A confirmation only sells the list it showed: if the rules change or the box is scanned again first, it is withdrawn. Before you confirm, it lists any skill whose best level would go down. Each talisman is checked again right before it is sold, and anything that changed since the scan is skipped. Selling waits while a game menu is open or the game is saving. A run stops on its own if zenny does not go up by exactly the expected amount. If a game update removes a function the mod relies on, or RNG Charm Crafting's bonus file cannot be read, selling turns off by itself and says why.
+A confirmation only sells the list it showed. Unique talismans need an extra tick, and anything you would lose is listed in red and needs its own tick. The list is scanned again whenever the box may have changed, each talisman is checked again right before it is sold, and an independent check holds back any sale that does not prove itself. Selling waits while a game menu is open or the game is saving, and stops on its own if zenny does not go up by exactly the expected amount. If something cannot be checked (a game update, an unreadable RNG Charm Crafting file), selling turns off and says why.
 
 [size=4][b]Requirements[/b][/size]
 [list]
@@ -35,26 +36,31 @@ A confirmation only sells the list it showed: if the rules change or the box is 
 [list=1]
 [*]Stand in the field or at camp with no game menu open, then press [b]Insert[/b].
 [*]Open [b]Script Generated UI > Bulk Sell Equipment > Show window[/b].
-[*]Click [b]Scan Equipment Box[/b], then pick your rules and review the list.
-[*]Optionally, click [b]Sell just 1 (test)[/b] first. Then click [b]Sell N talismans > Yes, sell[/b].
+[*]Click [b]Scan Equipment Box[/b], choose a [b]Keep[/b] option and review the list.
+[*]Optionally, click [b]Sell just 1 (test)[/b] first. Then click [b]Sell N talismans[/b], tick what the confirmation asks for, and [b]Yes, sell[/b].
 [*]Let the game autosave, for example by fast travelling.
 [/list]
-[b]Sales cannot be undone. Back up your save first.[/b] Sales are written to disk at the game's next autosave. If you close the game before then, they are not kept.
+[b]Sales cannot be undone and the game has no buyback. Back up your save first.[/b] To free a lot of space, sell in steps (best 10, then 5, then 3). Sales are written to disk at the game's next autosave. If you close the game before then, they are not kept.
+
+[size=4][b]Updating from 0.2.x[/b][/size]
+Your settings are converted once (the old file stays as [i]config.v1.json[/i]), and the window says what changed. The rarity rule becomes "Keep the best 1 per skill" up to that rarity.
 
 [size=4][b]Files[/b][/size]
 Settings: [i]reframework/data/BulkSell/config.json[/i]
+Your ticks: [i]reframework/data/BulkSell/picks/[/i]
 Receipts: [i]reframework/data/BulkSell/receipts/[/i]
 
 [size=4][b]Known limitations[/b][/size]
 [list]
 [*]Crafted talismans are not used when deciding what is covered.
-[*]The covered check does not count decorations you could still slot in. Decoration-aware comparison is planned.
+[*]Decorations you could still slot in are not counted. Decoration-aware comparison is planned.
+[*]"Best N" ranks by skill level and slots only; per-skill settings are planned.
 [*]The interface is in English. Skill names follow your game language.
 [/list]
 
 [size=4][b]Source and bug reports[/b][/size]
 [url=https://github.com/zamcoder/bulk-sell-equipment-mhwilds]github.com/zamcoder/bulk-sell-equipment-mhwilds[/url]
-When reporting a bug, please attach your receipt file and the REFramework log ([i]re2_framework_log.txt[/i] in the game folder).
+When reporting a bug, please attach your receipt file and the REFramework log ([i]re2_framework_log.txt[/i] in the game folder). For a wrong verdict, tick [b]Write debug files[/b] in the Bulk Sell menu, scan again, and attach the newest file from [i]reframework/data/BulkSell/debug/[/i].
 
 [size=4][b]Credits[/b][/size]
 praydog (REFramework), alphazolam and seifhassine (RSZ dumps), Quique20 (talisman encoding notes), eigeen (game-thread pattern), kvasszn (save-data field notes).

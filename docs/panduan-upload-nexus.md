@@ -4,7 +4,7 @@ Panduan ini untuk maintainer: cara membuat zip rilis lalu meng-upload-nya ke hal
 
 ## 1. Siapkan versi
 
-1. Naikkan `VERSION` di `src/reframework/autorun/BulkSell.lua`, misalnya `"0.2.2"` menjadi `"1.0.0"` untuk rilis publik pertama.
+1. Naikkan `VERSION` di `src/reframework/autorun/BulkSell.lua`, misalnya `"0.2.3"` menjadi `"0.3.0"`.
 2. Jalankan test, lalu pastikan hasilnya `syntax errors: 0, failing test files: 0`:
    ```powershell
    .venv\Scripts\python.exe -I tools\check.py
@@ -40,12 +40,12 @@ Panduan ini untuk maintainer: cara membuat zip rilis lalu meng-upload-nya ke hal
 | Kolom | Isi |
 |---|---|
 | Name | `Bulk Sell Equipment` |
-| Summary | `Safely bulk sell appraised talismans you no longer need: covered, duplicate or low-rarity charms, at the game's own price. Protects equipped, loadout, favorite and decorated talismans.` |
+| Summary | `Safely bulk sell appraised talismans you no longer need: duplicates, covered ones, or everything outside your best N per skill, at the game's own price. Protects equipped, loadout, favorite and decorated talismans.` |
 | Description | Tempel isi `docs/nexus-description.bbcode`. Editor Nexus menerima BBCode. |
 | Category | **Utilities**. Kalau tidak ada, pilih yang paling dekat, misalnya *Gameplay*. |
 | Version | Sama dengan `VERSION` |
 | Language | English |
-| Author | Nama yang ingin ditampilkan (misalnya `zamcoder`) |
+| Author | `evilryosaki` |
 | Tags | Contoh: Talismans, Charms, Utility, REFramework, Quality of Life |
 
 **Tab Media**
@@ -72,7 +72,7 @@ Upload screenshot dari langkah 2. Pilih satu sebagai gambar utama.
 
 - Isi **Credits** sesuai bagian Credits di README.
 - Pilih izin sesuai keinginan: apakah orang lain boleh memakai ulang aset, mengubah, atau meng-upload ulang.
-- Repo saat ini **belum punya lisensi**. Kalau ingin orang lain boleh memakai kodenya, tambahkan file `LICENSE` (misalnya MIT) di repo. Kalau ingin dibatasi, cukup atur izinnya di tab ini.
+- Repo memakai lisensi **MIT** (file `LICENSE`), jadi orang lain boleh memakai ulang dan mengubah kodenya. Sesuaikan isian izin di tab ini dengan lisensi itu.
 
 **Publish**
 

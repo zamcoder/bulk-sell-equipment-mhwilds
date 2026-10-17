@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.0
+
+Sell unique talismans too, with full control.
+
+**New**
+- **Keep option** with exact counts for every choice: *Keep everything (sell only what I tick)*, *Keep every unique talisman* (duplicates and covered ones only, the default) and *Keep the best 10 / 5 / 3 / 2 / 1 per skill*. "Best N" keeps your N best talismans for every skill and every slot shape and sells the other unique talismans up to a **rarity limit**. **Always keep** skills are never sold as unique.
+- **Ticks per row:** the Sell box of a row overrides the rules for that talisman (`*` marks it). Ticks are saved per save slot and character, and follow the talisman, not just its box entry. **Mark shown** (Sell / Keep / Auto) and **Undo**.
+- **Why column:** "Same as #k", "Covered by #k …", "Not in your best 3 · closest Item Prolonger #10 of 12", "Ambush #1 of 21", "In a loadout", and so on.
+- **Filters:** To sell, To keep, All, Your picks, Unique sales; **Find** by skill or `#box`; rarity checkboxes. **Sell the N shown**, and **Sell just 1 (test)** now sells the cheapest row shown.
+- **Box space** in the scan line (yellow under 50 free slots, red under 10) and "box after the sale" in the summary.
+
+**Safety**
+- Unique sales need the tick "I understand that unique talismans are sold". It is asked again when the rules change or the sale has more unique talismans than the one you agreed to.
+- Any lost skill level or slot shape (only your own ticks can cause one) is listed in red and needs "I accept losing these".
+- The list is scanned again after the REFramework menu was closed, or a full-screen menu or an equipment list was opened; a sale stops when the menu is closed.
+- A unique sale is skipped when one of the talismans kept for its skills changed.
+- An independent check re-derives every planned sale; a sale that fails it is kept instead.
+- If your saved ticks cannot be read, selling waits until you choose **Continue without my picks**.
+
+**Other changes**
+- **Settings from 0.2.x are converted once** (the old file stays as `config.v1.json`); the window says what changed. The rarity rule becomes *Keep the best 1 per skill* up to its rarity. Going back to 0.2.x still works.
+- Of identical copies, the cheaper one is now kept.
+- Receipts also record the rules, your ticks, what you acknowledged and, per talisman, the Why text and the talismans kept for it.
+- **Write debug files** (in the Bulk Sell menu) saves the whole plan for bug reports.
+
 ## 0.2.3
 
 Safety fixes; no new selling features.
