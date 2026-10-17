@@ -10,7 +10,14 @@ local T = lang.T
 local ui = {}
 
 local PAGE_SIZE = 50
-local TABLE_FLAGS = 64 | 1920   -- ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders
+local TABLE_FLAGS = 1 | 64 | 1920   -- ImGuiTableFlags_Resizable | RowBg | Borders
+local COLUMN_FIXED, COLUMN_STRETCH = 16, 8   -- ImGuiTableColumnFlags_WidthFixed / WidthStretch
+local COLUMNS = {   -- key, flags, width (fixed) or weight (stretch)
+    { "col_sell", COLUMN_FIXED, 36 }, { "col_box", COLUMN_FIXED, 52 }, { "col_talisman", COLUMN_STRETCH, 2.2 },
+    { "col_slots", COLUMN_FIXED, 72 }, { "col_price", COLUMN_FIXED, 72 }, { "col_verdict", COLUMN_FIXED, 130 },
+    { "col_why", COLUMN_STRETCH, 2.8 },
+}
+local WRAP = 100   -- characters per line for long messages (ImGui does not wrap plain text)
 local FIRST_USE_EVER = 4        -- ImGuiCond_FirstUseEver
 local HOVER_DISABLED = 1024     -- ImGuiHoveredFlags_AllowWhenDisabled
 local RED = 0xFF4040FF
@@ -35,6 +42,25 @@ local function thousands(n)
     local text = tostring(math.floor(n or 0))
     local result = text:reverse():gsub("(%d%d%d)", "%1,"):reverse()
     return (result:gsub("^,", ""))
+end
+
+-- Draws a long message on several lines, broken at spaces.
+local function wrap(text)
+    local lines, rest = {}, tostring(text)
+    while #rest > WRAP do
+        local cut = rest:sub(1, WRAP + 1):match("^.*() ")   -- the last space that keeps the line short enough
+        if not cut or cut <= 1 then break end
+        lines[#lines + 1] = rest:sub(1, cut - 1)
+        rest = rest:sub(cut + 1)
+    end
+    lines[#lines + 1] = rest
+    return lines
+end
+
+local function say(text, color)
+    for _, l in ipairs(wrap(text)) do
+        if color then imgui.text_colored(l, color) else imgui.text(l) end
+    end
 end
 
 local function tooltip(text)
@@ -243,8 +269,8 @@ end
 
 local function draw_confirm(state, actions, confirm)
     local what = confirm.label and T("confirm_one", confirm.label) or T("confirm_many", confirm.count)
-    imgui.text_colored(T("confirm_question", what, thousands(confirm.zenny)), YELLOW)
-    if confirm.unique_rule > 0 then imgui.text(T("confirm_unique", confirm.unique_rule, state.scan.settings.best_n)) end
+    say(T("confirm_question", what, thousands(confirm.zenny)), YELLOW)
+    if confirm.unique_rule > 0 then say(T("confirm_unique", confirm.unique_rule, state.scan.settings.best_n)) end
     if confirm.picks > 0 then imgui.text(T("confirm_picks", confirm.picks)) end
     if confirm.share > 50 then imgui.text(T("confirm_share", confirm.share)) end
     if confirm.need_unique then
@@ -275,11 +301,11 @@ local function draw_sell_controls(state, actions, rows)
         return
     end
     if sale then draw_sale_result(sale) end
-    if state.notice then imgui.text_colored(state.notice, YELLOW) end
+    if state.notice then say(state.notice, YELLOW) end
     if state.busy then return end
 
     if state.picks and state.picks.blocked then
-        imgui.text_colored(state.picks.blocked, YELLOW)
+        say(state.picks.blocked, YELLOW)
         if imgui.button(T("continue_without_picks") .. "##BulkSellNoPicks") then actions.continue_without_picks() end
         return
     end
@@ -288,7 +314,7 @@ local function draw_sell_controls(state, actions, rows)
         return
     end
     if state.block_reason then
-        imgui.text_colored(state.block_reason, YELLOW)
+        say(state.block_reason, YELLOW)
         return
     end
     if state.confirm then
@@ -324,12 +350,12 @@ local function draw_summary(state)
     imgui.text(T("summary_line", summary.sell, summary.keep, thousands(summary.zenny),
         cap and cap.used_after_sale or "?", cap and cap.total or "?"))
     local r = summary.by_rarity
-    imgui.text(T("summary_detail", reasons.duplicate or 0, reasons.dominated or 0, summary.unique_rule,
+    say(T("summary_detail", reasons.duplicate or 0, reasons.dominated or 0, summary.unique_rule,
         totals.pick_sell + totals.pick_keep, totals.pick_sell, totals.pick_keep, reasons.protected or 0,
         r[5] or 0, r[6] or 0, r[7] or 0, r[8] or 0))
     local settings = scan.settings
     if totals.losses > 0 then
-        imgui.text_colored(T("warn_losses", totals.losses), YELLOW)
+        say(T("warn_losses", totals.losses), YELLOW)
     elseif summary.sell > 0 and settings.mode == "best" then
         imgui.text_colored(T("promise_best", settings.best_n), GREEN)
     elseif summary.sell > 0 and settings.mode == "covered" then
@@ -409,8 +435,9 @@ local function draw_table(state, actions, scan, rows)
     if not imgui.begin_table("BulkSellTable", 7, TABLE_FLAGS) then return end
     -- end_table must run even if a row fails, or ImGui's stack is left unbalanced.
     local ok, err = pcall(function()
-        for _, column in ipairs({ "col_sell", "col_box", "col_talisman", "col_slots", "col_price", "col_verdict", "col_why" }) do
-            imgui.table_setup_column(T(column))
+        for _, column in ipairs(COLUMNS) do
+            -- Older bindings may not take the width arguments.
+            if not pcall(imgui.table_setup_column, T(column[1]), column[2], column[3]) then imgui.table_setup_column(T(column[1])) end
         end
         imgui.table_headers_row()
         for i = (view.page - 1) * PAGE_SIZE + 1, math.min(#rows, view.page * PAGE_SIZE) do
@@ -441,7 +468,7 @@ end
 
 local function draw_notices(state, actions)
     for i, text in ipairs(state.notices) do
-        imgui.text_colored(text, YELLOW)
+        say(text, YELLOW)
         imgui.same_line()
         if imgui.button(T("ok") .. "##BulkSellNotice" .. i) then
             actions.dismiss_notice(i)
@@ -521,5 +548,6 @@ end
 ui._thousands = thousands
 ui._drop_line = drop_line
 ui._view = view
+ui._wrap = wrap
 
 return ui

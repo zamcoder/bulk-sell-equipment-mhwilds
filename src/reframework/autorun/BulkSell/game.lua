@@ -137,7 +137,9 @@ end
 
 -- RNG Charm Crafting bonus talismans of the current save slot (see sidecar.lua).
 local function special_bonus(manager)
-    local result = sidecar.load(number(field(manager, "CurrentUserDataIndex")), files.read_json)
+    local slot = number(field(manager, "CurrentUserDataIndex"))
+    local read = math.tointeger(slot) and files.reader(sidecar.paths(slot)) or files.read_json
+    local result = sidecar.load(slot, read)
     log.info("[BulkSell] RCC sidecar: " .. table.concat(result.files, ", ") .. (result.blocked and " BLOCKED" or ""))
     return result
 end
@@ -248,7 +250,7 @@ local function save_identity(save, manager)
 end
 
 -- Reads every appraised talisman in the Equipment Box. `yield` (optional) is
--- called every 256 entries so the caller can spread the work over frames.
+-- called every 64 entries so the caller can spread the work over frames.
 -- Returns charms and box statistics, or nil and a reason.
 function game.read_talismans(yield)
     local save, manager = game.save()
@@ -259,6 +261,7 @@ function game.read_talismans(yield)
 
     local protected = protected_boxes(equip)
     local bonus = special_bonus(manager)
+    if yield then yield() end   -- the files above take a frame of their own
     local charms = {}
     local stats = {
         slots = size(box), used = 0, amulets = 0, appraised = 0, protected = 0, categories = {},
@@ -293,7 +296,7 @@ function game.read_talismans(yield)
                 end
             end
         end
-        if yield and index % 256 == 255 then yield() end
+        if yield and index % 64 == 63 then yield() end
     end
     return charms, stats
 end

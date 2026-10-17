@@ -146,7 +146,7 @@ function M.install()
     local env = {
         written = {}, files = {}, hooks = {}, pressed = {}, inputs = {}, texts = {},
         callbacks = {}, entries = {}, singletons = {}, logs = {}, storage = {},
-        drawing_ui = true, load_file_calls = 0,
+        drawing_ui = true, load_file_calls = 0, glob_calls = 0,
         raw = {}, parsed = {},   -- files as text for fs.read, and what json.load_string makes of a text
         disabled = 0,            -- begin_disabled depth: buttons and checkboxes do nothing inside
         hover = false,           -- what is_item_hovered answers
@@ -254,10 +254,23 @@ function M.install()
         fs = {
             read = function(path) return env.raw[path] or "" end,
             glob = function(pattern)
-                local lua_pattern = regex_to_lua(pattern)
+                env.glob_calls = env.glob_calls + 1
+                -- "^(?:a|b)$" is tried as "^a$" and "^b$".
+                local alternatives = {}
+                local inner = pattern:match("^%^%(%?:(.*)%)%$$")
+                if inner then
+                    for part in (inner .. "|"):gmatch("(.-)|") do alternatives[#alternatives + 1] = regex_to_lua("^" .. part .. "$") end
+                else
+                    alternatives[1] = regex_to_lua(pattern)
+                end
                 local matches = {}
                 for path in pairs(env.raw) do
-                    if path:find(lua_pattern) then matches[#matches + 1] = (path:gsub("/", "\\")) end
+                    for _, lua_pattern in ipairs(alternatives) do
+                        if path:find(lua_pattern) then
+                            matches[#matches + 1] = (path:gsub("/", "\\"))
+                            break
+                        end
+                    end
                 end
                 return matches
             end,

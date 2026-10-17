@@ -92,6 +92,18 @@ test("Why texts", function()
     eq(explain.class({ action = "sell", reason = "picked" }), "pick")
 end)
 
+test("long messages are wrapped at spaces, keeping the spacing", function()
+    imgui = setmetatable({}, { __index = function() return function() end end })
+    local ui = require("BulkSell.ui")
+    local text = lang.T("confirm_unique", 727, 3) .. " Sell 1 talisman (R5  Skill1 1  W1)."
+    local lines = ui._wrap(text)
+    eq(#lines > 1, true, "several lines")
+    for _, line in ipairs(lines) do eq(#line <= 100, true, "line length") end
+    eq(table.concat(lines, " "), text, "nothing lost")
+    eq(#ui._wrap("short"), 1, "short text stays one line")
+    eq(#ui._wrap(string.rep("x", 150)), 1, "a word longer than a line is not cut")
+end)
+
 test("capacity levels", function()
     local c = capacity.of(2087, 2400, 735)
     eq(c.free, 313, "free")

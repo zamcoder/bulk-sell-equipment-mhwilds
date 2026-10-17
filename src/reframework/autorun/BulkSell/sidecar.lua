@@ -43,6 +43,14 @@ local function read_store(store, result)
     return "ok", count
 end
 
+function sidecar.paths(save_slot)
+    local paths = {}
+    for _, suffix in ipairs({ "a", "b" }) do
+        paths[#paths + 1] = string.format("TalismanCrafting/special-bonuses-slot-%d-%s.json", save_slot, suffix)
+    end
+    return paths
+end
+
 -- read_json(path) -> "ok", value | "missing" | "corrupt" (files.read_json in the mod).
 function sidecar.load(save_slot, read_json)
     local result = { boxes = {}, identities = {}, files = {} }
@@ -50,8 +58,8 @@ function sidecar.load(save_slot, read_json)
         result.blocked = "Could not read the save slot number, so RNG Charm Crafting bonuses cannot be checked."
         return result
     end
-    for _, suffix in ipairs({ "a", "b" }) do
-        local path = string.format("TalismanCrafting/special-bonuses-slot-%d-%s.json", save_slot, suffix)
+    for i, path in ipairs(sidecar.paths(save_slot)) do
+        local suffix = i == 1 and "a" or "b"
         local status, store = read_json(path)
         local count
         if status == "ok" then

@@ -39,6 +39,32 @@ env.raw[PATH] = nil
 eq(files.exists(PATH), false, "glob misses a missing file")
 eq(env.load_file_calls, fallback_calls, "json.load_file never used with fs")
 
+-- fs.glob is slow in game: never used for a file with content, once for several files.
+local OTHER = "BulkSell/other-file.json"
+env.put_raw(PATH, "text-ok", { a = 2 })
+local globs = env.glob_calls
+eq(files.read_json(PATH), "ok", "file with content")
+eq(env.glob_calls, globs, "no glob for a file with content")
+eq(files.read_json(OTHER), "missing", "missing file")
+eq(env.glob_calls, globs + 1, "one glob for a file that reads empty")
+eq(files.read_json(OTHER, false), "missing", "known missing")
+eq(env.glob_calls, globs + 1, "no glob when the caller knows")
+local present = files.existing({ PATH, OTHER })
+eq(present[PATH], true, "existing: present")
+eq(present[OTHER], false, "existing: absent")
+globs = env.glob_calls
+local read = files.reader({ PATH, OTHER, "BulkSell/third.json" })
+eq(env.glob_calls, globs + 1, "one glob for two empty reads")
+eq(read(PATH), "ok", "reader: content")
+eq(read(OTHER), "missing", "reader: missing")
+eq(read("BulkSell/third.json"), "missing", "reader: missing too")
+env.put_raw(OTHER, "")
+read = files.reader({ OTHER })
+eq(read(OTHER), "corrupt", "reader: existing empty file is corrupt")
+eq(read("BulkSell/not-listed.json"), "missing", "reader: other paths read normally")
+env.raw[OTHER] = nil
+env.raw[PATH] = nil
+
 -- Without fs.glob an empty read cannot be told from a missing file.
 local glob = fs.glob
 fs.glob = nil

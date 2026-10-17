@@ -306,6 +306,11 @@ assert(env.has("Covered by #3 R6  Skill5 3"), "covered why")
 eq(env.files["BulkSell/config.json"].max_rarity, 8, "rarity limit saved")
 eq(env.files["BulkSell/config.json"].rule_enabled, false, "legacy rule key written off")
 
+-- A rescan uses at most one fs.glob (about 9 ms in game): the missing sidecar copy.
+local globs_before = env.glob_calls
+rescan()
+eq(env.glob_calls - globs_before, 1, "one glob per rescan")
+
 -- Nothing touches the game while the REFramework menu is closed; reopening rescans.
 local revision = T.state.scan.revision
 env.drawing_ui = false

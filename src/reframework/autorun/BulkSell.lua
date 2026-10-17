@@ -193,7 +193,12 @@ local function analyse(charms, stats)
     }
     scan.ctx = { names = state.skill_names, by_key = by_key, info = info, settings = scan.settings, ignore = options.ignore_skills }
     state.scan = scan
-    if state.settings.debug then write_debug_dump(scan, options) end
+    if state.settings.debug then
+        coroutine.yield()
+        local started = os.clock()
+        write_debug_dump(scan, options)
+        if state.job_stats then state.job_stats.dump = os.clock() - started end
+    end
 end
 
 local function scan_job()
@@ -226,7 +231,9 @@ local function scan_job()
     local store = state.picks
     if not store or store.slot ~= stats.save_slot or store.play_start ~= stats.play_start then
         if store then save_picks() end
-        state.picks = picks.load(stats.save_slot, stats.play_start, files.read_json)
+        local read = stats.save_slot ~= nil and files.reader({ picks.paths(stats.save_slot).a, picks.paths(stats.save_slot).b })
+            or files.read_json
+        state.picks = picks.load(stats.save_slot, stats.play_start, read)
     end
     analyse(charms, stats)
 end
@@ -343,9 +350,11 @@ local function sell_job(confirm)
     }
     state.sale = sale
     save_picks(true)
+    coroutine.yield()   -- file work gets a frame of its own
     local ctx, reason = game.begin_sale()
     if not ctx then error(reason, 0) end
     sale.money_before = game.money(ctx)
+    coroutine.yield()
     local scan = state.scan
     local sold, sold_keys = {}, {}
 
@@ -451,7 +460,7 @@ end
 local function start(name, job)
     state.job = coroutine.create(job)
     state.job_name = name
-    state.job_stats = { name = name, frames = 0, longest = 0, started = os.clock() }
+    state.job_stats = { name = name, frames = 0, longest = 0, slow = 0, started = os.clock() }
     state.busy = true
     state.error = nil
 end
@@ -622,6 +631,7 @@ re.on_pre_application_entry("UpdateBehavior", function()
         local ok, err = coroutine.resume(job)
         local took = os.clock() - before
         if took > job_stats.longest then job_stats.longest = took end
+        if took > 0.006 then job_stats.slow = job_stats.slow + 1 end
         if not ok then
             state.error = tostring(err)
             log_error(state.error)
@@ -633,8 +643,9 @@ re.on_pre_application_entry("UpdateBehavior", function()
         job_stats.seconds = os.clock() - job_stats.started
         state.last_perf = job_stats
         if state.settings.debug then
-            log_info(string.format("%s done in %d frames (%.3f s), longest resume %.1f ms",
-                job_stats.name, job_stats.frames, job_stats.seconds, job_stats.longest * 1000))
+            log_info(string.format("%s done in %d frames (%.3f s), longest resume %.1f ms, resumes over 6 ms: %d%s",
+                job_stats.name, job_stats.frames, job_stats.seconds, job_stats.longest * 1000, job_stats.slow,
+                job_stats.dump and string.format(" (debug dump %.1f ms)", job_stats.dump * 1000) or ""))
         end
         cancel_job()
     end
