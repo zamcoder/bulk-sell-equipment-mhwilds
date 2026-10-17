@@ -8,11 +8,13 @@ local eq = support.eq
 local runner = support.runner()
 local test = runner.test
 
-local SOURCES = { "BulkSell.lua", "BulkSell/ui.lua", "BulkSell/explain.lua", "BulkSell/picks.lua", "BulkSell/config.lua", "BulkSell/skills.lua" }
+local SOURCES = { "BulkSell.lua", "BulkSell/ui.lua", "BulkSell/explain.lua", "BulkSell/picks.lua", "BulkSell/config.lua", "BulkSell/skills.lua", "BulkSell/stars.lua" }
 local DYNAMIC = {   -- keys built at run time
     "filter_to_sell", "filter_to_keep", "filter_all", "filter_picks", "filter_unique",
     "mark_sell", "mark_keep", "mark_auto", "filter_changed", "filter_last",
     "col_skill", "col_on_talismans", "col_best_level", "col_keep", "col_after",
+    "star_confirm_kept", "star_confirm_picks", "star_confirm_remove", "scope_all", "scope_stays", "scope_sell",
+    "lang_game", "lang_en", "lang_ja", "lang_ko", "lang_zh_hans", "lang_zh_hant",
     "col_sell", "col_box", "col_talisman", "col_slots", "col_price", "col_verdict", "col_why",
     "why_protected_equipped", "why_protected_loadout", "why_protected_favorite", "why_protected_decorations", "why_protected_bonus",
 }
@@ -23,7 +25,7 @@ test("every text key used by the code exists", function()
         local file = assert(io.open(PROJECT_ROOT .. "/src/reframework/autorun/" .. name, "r"))
         local text = file:read("a")
         file:close()
-        for key in text:gmatch('T%("([%w_]+)"') do
+        for key in text:gmatch('T%("([%w_]+)"%s*[,)]') do
             if not lang.EN[key] then missing[#missing + 1] = name .. ": " .. key end
         end
     end

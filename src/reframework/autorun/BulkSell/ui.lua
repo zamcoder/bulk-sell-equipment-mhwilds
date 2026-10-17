@@ -4,8 +4,10 @@
 
 local capacity = require("BulkSell.capacity")
 local explain = require("BulkSell.explain")
+local export = require("BulkSell.export")
 local lang = require("BulkSell.lang")
 local skills = require("BulkSell.skills")
+local stars = require("BulkSell.stars")
 local T = lang.T
 
 local ui = {}
@@ -38,6 +40,7 @@ local view = {
     filter = 1, page = 1, find = "", rarity = { [5] = true, [6] = true, [7] = true, [8] = true },
     rows = nil, rows_key = nil, texts = {}, texts_revision = nil, totals = nil,
     skill_find = "", skill_rows = nil, skill_rows_revision = nil,
+    export_scope = 1, export_language = 1, star_counts = nil,
 }
 
 local function has(name) return type(imgui[name]) == "function" end
@@ -443,6 +446,11 @@ local function draw_summary(state)
     elseif summary.sell > 0 and settings.mode == "covered" then
         imgui.text_colored(T("promise_covered"), GREEN)
     end
+    if summary.sell > 0 then
+        local points = 0
+        for rarity, n in pairs(summary.by_rarity) do points = points + n * (export.MELD_POINTS[rarity] or 0) end
+        say(T("planner", thousands(summary.zenny), thousands(points)), GREY)
+    end
     local change = scan.last_change
     if change and change.count > 0 then
         say(T("last_change", change.what, change.more, change.fewer))
@@ -554,6 +562,107 @@ local function draw_table(state, actions, scan, rows)
     if not ok then error(err, 0) end
 end
 
+-- Tools: stars and export ------------------------------------------------------------
+
+local function star_counts(state, scan)
+    local c = view.star_counts
+    if c and c.revision == scan.revision then return c end
+    c = { revision = scan.revision, kept = 0, picks = 0, remove = 0 }
+    for _, charm in ipairs(scan.charms) do
+        local v = scan.verdicts[charm.key]
+        if v.action == "keep" and not charm.favorite then
+            c.kept = c.kept + 1
+            if v.reason == "picked" then c.picks = c.picks + 1 end
+        end
+    end
+    if state.stars then c.remove = #stars.removable(state.stars, scan.charms) end
+    view.star_counts = c
+    return c
+end
+
+local function draw_star_result(run)
+    if not run or not run.finished then return end
+    imgui.text_colored(T(run.want and "star_result_add" or "star_result_remove", run.changed), GREEN)
+    if #run.skipped > 0 then imgui.text(T("star_skipped", #run.skipped)) end
+    if run.stopped then say(T("stopped", run.stopped), YELLOW) end
+end
+
+local function draw_stars(state, actions, scan)
+    local run = state.star_run
+    if state.busy and state.job_name == "star" and run and not run.finished then
+        imgui.text(T("star_progress", run.done, run.total))
+        if imgui.button(T("stop") .. "##BulkSellStarStop") then actions.stop_sell() end
+        return
+    end
+    draw_star_result(run)
+    local ledger = state.stars
+    if ledger and ledger.blocked then
+        say(ledger.blocked, YELLOW)
+        return
+    end
+    local pending = state.star_confirm
+    if pending then
+        say(T("star_confirm_" .. pending.kind, #pending.keys), YELLOW)
+        if imgui.button(T("yes") .. "##BulkSellStarYes") then actions.confirm_star() end
+        imgui.same_line()
+        if imgui.button(T("cancel") .. "##BulkSellStarNo") then actions.cancel_star() end
+        return
+    end
+    if state.busy or state.stale or state.block_reason then return end
+    local c = star_counts(state, scan)
+    local drawn = false
+    for _, entry in ipairs({ { "kept", "star_kept_button", c.kept }, { "picks", "star_picks_button", c.picks },
+        { "remove", "star_remove_button", c.remove } }) do
+        if entry[3] > 0 then
+            if drawn then imgui.same_line() end
+            if imgui.button(T(entry[2], entry[3]) .. "##BulkSellStar" .. entry[1]) then actions.request_star(entry[1]) end
+            drawn = true
+        end
+    end
+    if not drawn then imgui.text(T("star_nothing")) end
+end
+
+local function draw_export(state, actions)
+    local scopes, languages = {}, {}
+    for i, scope in ipairs(export.SCOPES) do scopes[i] = T("scope_" .. scope) end
+    for i, language in ipairs(state.export_languages or {}) do languages[i] = T(language[1]) end
+    local changed, scope = imgui.combo(T("export_scope") .. "##BulkSellExportScope", view.export_scope, scopes)
+    if changed then view.export_scope = scope end
+    changed, scope = imgui.combo(T("export_names") .. "##BulkSellExportNames", view.export_language, languages)
+    if changed then view.export_language = scope end
+    if not state.busy then
+        if imgui.button(T("export_wikidb") .. "##BulkSellWikiDb") then
+            actions.export_wikidb(export.SCOPES[view.export_scope], view.export_language)
+        end
+        imgui.same_line()
+        if imgui.button(T("export_csv") .. "##BulkSellCsv") then actions.export_csv(export.SCOPES[view.export_scope]) end
+    end
+    local language = (state.export_languages or {})[view.export_language]
+    local site = language and language[3] ~= "game" and language[3] or "en"
+    imgui.text(T("wikidb_step_1", site))
+    imgui.text(T("wikidb_step_2"))
+    imgui.text_colored(T("wikidb_warning"), YELLOW)
+    local result = state.export_result
+    if result then
+        if result.kind == "wikidb" then
+            imgui.text_colored(T("export_copied", result.count), GREEN)
+            say(result.path and T("export_saved", result.path) or T("export_not_saved"))
+            if result.missing_names then say(T("export_some_names"), YELLOW) end
+        elseif result.path then
+            say(T("export_csv_saved", result.count, result.path), GREEN)
+        else
+            say(T("export_csv_failed"), YELLOW)
+        end
+    end
+end
+
+local function draw_tools(state, actions, scan)
+    if not has("collapsing_header") or not imgui.collapsing_header(T("tools_header") .. "###BulkSellTools") then return end
+    draw_stars(state, actions, scan)
+    imgui.separator()
+    draw_export(state, actions)
+end
+
 local function draw_notices(state, actions)
     for i, text in ipairs(state.notices) do
         say(text, YELLOW)
@@ -602,6 +711,9 @@ local function draw_body(state, actions)
     draw_sell_controls(state, actions, rows)
 
     imgui.separator()
+    draw_tools(state, actions, scan)
+
+    imgui.separator()
     draw_table(state, actions, scan, rows)
 end
 
@@ -624,6 +736,11 @@ function ui.menu(state)
 end
 
 function ui.window(state, actions)
+    -- An export put its text here; ImGui can only set the clipboard while it draws.
+    if state.clipboard then
+        if has("set_clipboard") then pcall(imgui.set_clipboard, state.clipboard) end
+        actions.clipboard_done()
+    end
     if not state.settings.window_open or not reframework:is_drawing_ui() then return end
     pcall(function() imgui.set_next_window_size(Vector2f.new(1100, 760), FIRST_USE_EVER) end)
     -- "###" keeps the window ID fixed when the title changes (translations).

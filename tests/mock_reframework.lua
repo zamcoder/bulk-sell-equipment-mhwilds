@@ -152,6 +152,7 @@ function M.install()
         hover = false,           -- what is_item_hovered answers
         tooltips = {},
         buttons = {}, combos = {}, headers = {},   -- what the last env.draw drew
+        text_files = {}, clipboard = nil,          -- fs.write results, imgui.set_clipboard
     }
     fs = nil
 
@@ -216,6 +217,7 @@ function M.install()
         end,
         is_item_hovered = function() return env.hover end,
         set_tooltip = function(text) env.tooltips[#env.tooltips + 1] = text end,
+        set_clipboard = function(text) env.clipboard = text end,
         checkbox = input,
         slider_int = input,
         combo = function(label, value, items)
@@ -256,6 +258,11 @@ function M.install()
     function env.enable_fs()
         fs = {
             read = function(path) return env.raw[path] or "" end,
+            write = function(path, text)
+                env.raw[path] = text
+                env.text_files[path] = text
+                return true
+            end,
             glob = function(pattern)
                 env.glob_calls = env.glob_calls + 1
                 -- "^(?:a|b)$" is tried as "^a$" and "^b$".

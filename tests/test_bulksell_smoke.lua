@@ -24,6 +24,11 @@ add_field(work_td, "BowgunCustomizeId", "System.Int16[]")
 add_field(work_td, "EquipmentAccessoryIdArray", "System.Int16[]")
 add_method(work_td, "get_Category", "System.Int32", {}, function(self) return self.values.category end)
 add_method(work_td, "isFavorite", "System.Boolean", {}, function(self) return self.values.FreeVal4 ~= 0 end)
+local favorite_calls, favorite_works = 0, true   -- false: the star does not change (the job must stop)
+add_method(work_td, "changeFavorite", "System.Void", { "System.Boolean" }, function(self, want)
+    favorite_calls = favorite_calls + 1
+    if favorite_works then self.values.FreeVal4 = want and 1 or 0 end
+end)
 add_method(work_td, "init", "System.Void", {}, function(self)
     local v = self.values
     v.category, v.Category_Gender, v.FreeVal0, v.FreeVal1, v.FreeVal4 = -1, 141, 0, 0, 0
@@ -124,6 +129,13 @@ new_type("app.HunterDef.Skill")
 local message_td = new_type("app.MessageUtil", { parent = "System.Object" })
 add_method(message_td, "getHunterSkillName", "System.Guid", { "app.HunterDef.Skill" }, function(_, id) return { skill = id } end, true)
 add_method(message_td, "getText", "System.String", { "System.Guid", "System.Int32" }, function(_, guid) return "Skill" .. guid.skill end, true)
+-- Names in another language: Japanese (0) works, every other language gives nothing.
+new_type("via.Language")
+local gui_message_td = new_type("via.gui.message", { parent = "System.Object" })
+add_method(gui_message_td, "get", "System.String", { "System.Guid", "via.Language" }, function(_, guid, language)
+    if language == 0 then return "JA-Skill" .. guid.skill end
+    return ""
+end, true)
 
 local prices = { [189] = 3000, [190] = 6000, [191] = 9000, [192] = 16000 }
 new_type("app.user_data.AmuletData.cData", { parent = "System.Object" })
@@ -774,6 +786,96 @@ assert(env.has("1 new since the last scan"), "new talismans counted")
 set_packed(10, { 1009, 1011, 0, 0 })
 rescan()
 
+-- Tools: stars ---------------------------------------------------------------------
+-- Best 1 keeps 1, 3, 7, 8 (protected), 10 and 11, and sells 4 and 12.
+assert(env.headers["Tools: stars and export###BulkSellTools"], "Tools header")
+local planned_before = T.state.scan.summary.sell
+env.draw({ "Star the 6 kept...##BulkSellStarkept" })
+env.draw()
+assert(env.has("Star 6 kept talismans?"), "star confirmation")
+eq(favorite_calls, 0, "nothing starred before Yes")
+env.draw({ "Yes##BulkSellStarYes" })
+frames()
+env.draw()
+eq(favorite_calls, 6, "one call per kept talisman")
+assert(env.has("Starred 6 talismans."), "star result")
+for _, box_index in ipairs({ 1, 3, 7, 8, 10, 11 }) do eq(at(box_index).values.FreeVal4, 1, "starred box " .. box_index) end
+eq(at(4).values.FreeVal4, 0, "a planned sale is not starred")
+local ledger = env.files["BulkSell/stars/slot-0-a.json"]
+assert(ledger, "stars ledger written")
+eq(ledger.added["10"].fp, "190:1009:1011:0:0", "ledger entry with fingerprint")
+eq(T.state.scan.summary.sell, planned_before, "starring what is kept does not change the plan")
+assert(env.buttons["Remove stars Bulk Sell added (6)...##BulkSellStarremove"], "the added stars can be removed")
+for label in pairs(env.buttons) do assert(not label:find("##BulkSellStarkept", 1, true), "nothing left to star") end
+
+-- A star the player set is never removed; the ones Bulk Sell added are.
+at(4).values.FreeVal4 = 1
+rescan()
+env.draw({ "Remove stars Bulk Sell added (6)...##BulkSellStarremove" })
+env.draw({ "Yes##BulkSellStarYes" })
+frames()
+env.draw()
+assert(env.has("Removed 6 stars."), "remove result")
+eq(at(10).values.FreeVal4, 0, "star removed")
+eq(at(4).values.FreeVal4, 1, "the player's own star stays")
+eq(next(T.state.stars.entries), nil, "ledger empty")
+at(4).values.FreeVal4 = 0
+rescan()
+
+-- A star that does not change stops the job.
+favorite_works = false
+env.draw({ "Star the 6 kept...##BulkSellStarkept" })
+env.draw({ "Yes##BulkSellStarYes" })
+frames()
+env.draw()
+assert(env.has("Stopped: The favorite star did not change as asked"), "stopped")
+eq(next(T.state.stars.entries), nil, "nothing recorded")
+favorite_works = true
+frames(2)
+
+-- Tools: export --------------------------------------------------------------------
+env.draw({ "Copy for mhwilds.wiki-db.com##BulkSellWikiDb" })
+frames()
+env.draw()
+assert(env.clipboard and env.clipboard:find("Skill9,1,Skill11,1,,0,0,0,0,0,0,0\n", 1, true), "wiki-db line on the clipboard")
+assert(env.has("Copied 8 talismans to the clipboard."), "copy result")
+local wikidb_file
+for path, text in pairs(env.text_files) do
+    if path:find("^BulkSell/export/wikidb_game_") then wikidb_file = text end
+end
+eq(wikidb_file, env.clipboard, "the same text saved as a file")
+env.draw(nil, { ["Names##BulkSellExportNames"] = 3 })   -- Japanese
+env.draw(nil, { ["Export##BulkSellExportScope"] = 3 })  -- only what would be sold
+env.draw({ "Copy for mhwilds.wiki-db.com##BulkSellWikiDb" })
+frames()
+env.draw()
+eq(env.clipboard, "JA-Skill5,2,,0,,0,1,0,0,0,0,0\nJA-Skill7,1,JA-Skill11,1,,0,0,0,0,0,0,0\n", "Japanese names, sales only")
+assert(not env.has("Some names were not available"), "all names found")
+env.draw(nil, { ["Names##BulkSellExportNames"] = 4 })   -- Korean: the fake game has none
+env.draw({ "Copy for mhwilds.wiki-db.com##BulkSellWikiDb" })
+frames()
+env.draw()
+assert(env.clipboard:find("Skill5,2", 1, true), "falls back to the game's names")
+assert(env.has("Some names were not available in that language"), "fallback reported")
+env.draw({ "Save CSV##BulkSellCsv" })
+frames()
+env.draw()
+local csv
+for path, text in pairs(env.text_files) do
+    if path:find("^BulkSell/export/talismans_.*%.csv$") then csv = text end
+end
+assert(csv and csv:sub(1, 3) == "\239\187\191", "CSV with BOM")
+assert(csv:find("\r\n4,5,Skill5,2,,,,,A1,1,0,0,0,1500,Sell · covered,Covered by #3 R6  Skill5 3,3,\r\n", 1, true), "CSV row")
+local write = fs.write
+fs.write = nil
+env.draw({ "Save CSV##BulkSellCsv" })
+frames()
+env.draw()
+assert(env.has("The CSV could not be written"), "no fs.write")
+fs.write = write
+env.draw(nil, { ["Names##BulkSellExportNames"] = 1, ["Export##BulkSellExportScope"] = 1 })
+assert(env.has("Selling these gives 6,000 z. Melding them would give 7 Melding Pot points instead"), "planner line")
+
 -- Debug files: a plan dump with string keys only (so it reads back as written) and a timing line.
 env.draw(nil, { ["Write debug files (for bug reports)##BulkSellDebug"] = true })
 env.draw(nil, { [KEEP] = 7 })
@@ -798,7 +900,8 @@ env.draw(nil, { ["Write debug files (for bug reports)##BulkSellDebug"] = false }
 
 eq(env.load_file_calls, 0, "no json.load_file, so no '[JSON] Failed to load file' log lines")
 
-local expected_errors = { "Zenny changed by 0", "sale price does not match", "does not match the plan" }
+local expected_errors = { "Zenny changed by 0", "sale price does not match", "does not match the plan",
+    "favorite star did not change" }
 local unexpected = {}
 for _, line in ipairs(env.logs) do
     if line:find("^error") then

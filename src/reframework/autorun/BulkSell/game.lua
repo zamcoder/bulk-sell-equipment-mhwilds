@@ -40,7 +40,7 @@ local SELL_METHODS = {
     { "full_screen_ui", "app.GUIManager", "isOpenFullScreenUI()" },
 }
 
-local cache = { methods = nil, skill_names = {}, prices = {} }
+local cache = { methods = nil, skill_names = {}, prices = {}, names_in = {} }
 local equip_list_open = false   -- app.GUI080001 (equipment lists, including View/Sell Equipment)
 local equip_list_opened = false -- set when such a list opens; read (and cleared) by take_list_opened()
 
@@ -62,6 +62,8 @@ local function methods()
             save_flow = method("app.SaveDataManager", "get_IsSaveLoadFlowRunning()"),
             show_saving = method("app.SaveDataManager", "get_IsShowSaving()"),
             empty_box_num = method("app.savedata.cEquipParam", "getEmptyBoxNum()"),
+            change_favorite = method("app.savedata.cEquipWork", "changeFavorite(System.Boolean)"),
+            message_get = method("via.gui.message", "get(System.Guid, via.Language)"),
         }
         for _, entry in ipairs(SELL_METHODS) do m[entry[1]] = method(entry[2], entry[3]) end
         cache.methods = m
@@ -286,6 +288,7 @@ function game.read_talismans(yield)
                 if charm then
                     stats.appraised = stats.appraised + 1
                     charm.price, charm.price_source = sale_price(charm.base_price, index)
+                    charm.favorite = is_favorite(work)
                     charm.protected = protected[index]
                         or (is_favorite(work) and "favorite")
                         or (sidecar.protects(bonus, index, charm.fingerprint) and "special bonus")
@@ -314,6 +317,26 @@ function game.skill_name(id)
         cache.skill_names[id] = name
     end
     return name
+end
+
+-- A skill name in another text language (via.Language: 0 Japanese, 1 English, 11 Korean,
+-- 12 Traditional Chinese, 13 Simplified Chinese), or nil when the game cannot give it.
+-- Must be called on the game thread the first time for each id and language.
+function game.skill_name_in(id, language)
+    local by_id = cache.names_in[language]
+    if not by_id then
+        by_id = {}
+        cache.names_in[language] = by_id
+    end
+    if by_id[id] == nil then
+        local m = methods()
+        local ok, text = false, nil
+        if m.skill_name and m.message_get then
+            ok, text = pcall(function() return m.message_get:call(nil, m.skill_name:call(nil, id), language) end)
+        end
+        by_id[id] = (ok and type(text) == "string" and text ~= "") and text or false
+    end
+    return by_id[id] or nil
 end
 
 -- Tracks the equipment list screen, so the box is never changed under an open list.
@@ -389,6 +412,37 @@ function game.begin_sale()
     if not ctx.equip or not ctx.basic or not ctx.box then return nil, "Save data is incomplete." end
     if ctx.bonus.blocked then return nil, ctx.bonus.blocked end
     return ctx
+end
+
+-- What a star job needs: the Equipment Box and the favorite methods.
+function game.begin_star()
+    local save, reason = game.save()
+    if not save then return nil, reason end
+    local m = methods()
+    if not m.change_favorite or not m.is_favorite then
+        return nil, "Game method missing: app.savedata.cEquipWork::changeFavorite / isFavorite"
+    end
+    local box = field(field(save, "_Equip"), "_EquipBox")
+    if not box then return nil, "Equipment Box not found." end
+    return { m = m, box = box }
+end
+
+-- Sets the favorite star of one talisman after checking it is still the scanned one.
+--   { done = true }                          changed
+--   { done = false, already = true }         it already was as asked
+--   { done = false, reason = "..." }         skipped, nothing changed
+--   { done = false, fatal = true, reason }   the star did not change as asked: stop
+function game.set_favorite(ctx, charm, want)
+    local work = element(ctx.box, charm.key)
+    if not work or is_empty(work) or category(work) ~= AMULET_CATEGORY then return { done = false, reason = "no longer in the box" } end
+    local current = decode(work, charm.key)
+    if not current or current.fingerprint ~= charm.fingerprint then return { done = false, reason = "changed since the scan" } end
+    if is_favorite(work) == want then return { done = false, already = true } end
+    local ok = pcall(ctx.m.change_favorite.call, ctx.m.change_favorite, work, want)
+    if not ok or is_favorite(work) ~= want then
+        return { done = false, fatal = true, reason = "The favorite star did not change as asked; stopped to be safe." }
+    end
+    return { done = true }
 end
 
 -- True when the box entry still holds exactly the scanned talisman.

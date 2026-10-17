@@ -10,67 +10,33 @@
 -- Picks are keyed by Equipment Box index and carry the talisman's fingerprint, so a pick
 -- never applies to another talisman that later lands in the same box entry.
 
+local ab = require("BulkSell.ab_store")
+
 local picks = {}
 
-local FORMAT = "bulk-sell-picks"
-local MAP_FORMAT = "box index -> pick"
-local VERSION = 1
-local MAX_ENTRIES = 2400
 local ACTIONS = { sell = true, keep = true }
 
-function picks.paths(slot)
-    local base = "BulkSell/picks/slot-" .. tostring(slot)
-    return { a = base .. "-a.json", b = base .. "-b.json" }
-end
+local KIND = {
+    base = "BulkSell/picks/slot-",
+    format = "bulk-sell-picks",
+    map_format = "box index -> pick",
+    field = "picks",
+    blocked = "Your saved Sell/Keep ticks could not be read (reframework/data/BulkSell/picks/).",
+    decode = function(pick)
+        if type(pick) ~= "table" or not ACTIONS[pick.action] or type(pick.fp) ~= "string" then return nil end
+        return { action = pick.action, fp = pick.fp, at = type(pick.at) == "string" and pick.at or nil }
+    end,
+    encode = function(pick) return { action = pick.action, fp = pick.fp, at = pick.at } end,
+}
+
+function picks.paths(slot) return ab.paths(KIND, slot) end
 
 -- An empty store for one save slot and character.
-function picks.new(slot, play_start)
-    return { slot = slot, play_start = play_start, revision = 0, entries = {}, dirty = false,
-        last_file = nil, blocked = nil, undo = nil }
-end
-
--- Entries of a decoded file, or nil when the file is not a valid picks file of this slot.
-local function decode(value, slot, play_start)
-    if type(value) ~= "table" or value._format ~= FORMAT or math.tointeger(value.save_slot) ~= slot then return nil end
-    if type(value.picks) ~= "table" or value.picks._format ~= MAP_FORMAT then return nil end
-    if play_start and value.play_start ~= nil and tostring(value.play_start) ~= tostring(play_start) then return nil, "other" end
-    local entries, n = {}, 0
-    for key, pick in pairs(value.picks) do
-        local box = key ~= "_format" and type(key) == "string" and key:match("^%d+$") and tonumber(key)
-        if box and type(pick) == "table" and ACTIONS[pick.action] and type(pick.fp) == "string" and n < MAX_ENTRIES then
-            entries[box] = { action = pick.action, fp = pick.fp, at = type(pick.at) == "string" and pick.at or nil }
-            n = n + 1
-        end
-    end
-    return entries, math.tointeger(value.revision) or 0
-end
+picks.new = ab.new
 
 -- Loads the newest valid copy. `read_json(path)` returns "ok", value | "missing" | "corrupt".
 -- Returns the store; store.blocked is a reason when a file exists but no copy is usable.
-function picks.load(slot, play_start, read_json)
-    local store = picks.new(slot, play_start)
-    local best_entries, best_revision, best_name
-    local unreadable = false
-    for _, name in ipairs({ "a", "b" }) do
-        local status, value = read_json(picks.paths(slot)[name])
-        local entries, revision
-        if status == "ok" then entries, revision = decode(value, slot, play_start) end
-        if entries then
-            if not best_revision or revision > best_revision then
-                best_entries, best_revision, best_name = entries, revision, name
-            end
-        elseif status ~= "missing" and revision ~= "other" then
-            unreadable = true
-        end
-    end
-    if best_entries then
-        -- The other copy may be an older or half-written one; the newest valid copy wins.
-        store.entries, store.revision, store.last_file = best_entries, best_revision, best_name
-    elseif unreadable then
-        store.blocked = "Your saved Sell/Keep ticks could not be read (reframework/data/BulkSell/picks/)."
-    end
-    return store
-end
+function picks.load(slot, play_start, read_json) return ab.load(KIND, slot, play_start, read_json) end
 
 -- The player chose to go on without the unreadable picks; the next write replaces them.
 function picks.continue_without(store)
@@ -81,31 +47,7 @@ end
 
 -- Writes the other copy with the next revision and reads it back.
 -- Returns true, or false when the file could not be written or did not read back.
-function picks.save(store, write_json, read_json)
-    if store.blocked or store.slot == nil then return false end
-    local name = store.last_file == "a" and "b" or "a"
-    local path = picks.paths(store.slot)[name]
-    local map, n = { _format = MAP_FORMAT }, 0
-    for key, pick in pairs(store.entries) do
-        map[tostring(key)] = { action = pick.action, fp = pick.fp, at = pick.at }
-        n = n + 1
-    end
-    local revision = store.revision + 1
-    local value = {
-        version = VERSION, _format = FORMAT, save_slot = store.slot, revision = revision, count = n,
-        play_start = store.play_start ~= nil and tostring(store.play_start) or nil,
-        picks = map,
-    }
-    if not write_json(path, value) then return false end
-    local status, back = read_json(path)
-    local entries, back_revision = decode(status == "ok" and back or nil, store.slot, store.play_start)
-    if not entries or back_revision ~= revision then return false end
-    local count = 0
-    for _ in pairs(entries) do count = count + 1 end
-    if count ~= n then return false end
-    store.revision, store.last_file, store.dirty = revision, name, false
-    return true
-end
+function picks.save(store, write_json, read_json) return ab.save(KIND, store, write_json, read_json) end
 
 -- Matches stored picks with the scanned box (pure). `charms` carry key, fingerprint and
 -- protected. Returns the picks for analysis.plan ({ [key] = action }, protected ones left

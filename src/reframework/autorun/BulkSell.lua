@@ -10,11 +10,13 @@
 local analysis = require("BulkSell.analysis")
 local config = require("BulkSell.config")
 local explain = require("BulkSell.explain")
+local export = require("BulkSell.export")
 local files = require("BulkSell.files")
 local game = require("BulkSell.game")
 local lang = require("BulkSell.lang")
 local picks = require("BulkSell.picks")
 local skills = require("BulkSell.skills")
+local stars = require("BulkSell.stars")
 local ui = require("BulkSell.ui")
 
 local T = lang.T
@@ -28,6 +30,14 @@ local RECEIPT_DIR = "BulkSell/receipts/"
 local DEBUG_DIR = "BulkSell/debug/"
 local MAX_KEPT_FOR = 10          -- refs listed per receipt entry
 local SKILLS_CONFIRM = 10        -- "Set shown" on more skills than this asks first
+local EXPORT_DIR = "BulkSell/export/"
+-- Jobs that change the game finish on their own (and write their records) when the menu closes.
+local STOPS_ITSELF = { sell = true, star = true }
+-- Name languages for the wiki-db export: label key, via.Language value, file and site tag.
+local EXPORT_LANGUAGES = {
+    { "lang_game", nil, "game" }, { "lang_en", 1, "en" }, { "lang_ja", 0, "ja" }, { "lang_ko", 11, "ko" },
+    { "lang_zh_hans", 13, "zh-hans" }, { "lang_zh_hant", 12, "zh-hant" },
+}
 
 local settings, migration_notice = config.load()
 
@@ -57,6 +67,11 @@ local state = {
     picks_saved_at = 0,
     skills_undo = nil,    -- per-skill settings before the last change in the Skills panel
     skills_confirm = nil, -- a pending "Set shown" on many skills, or "Reset all"
+    stars = nil,          -- the stars Bulk Sell added, for the current save slot
+    star_confirm = nil,   -- a pending star job: { kind, keys, want, revision }
+    star_run = nil,       -- progress and result of the last star job
+    export_result = nil,  -- what the last export did
+    clipboard = nil,      -- text the UI puts on the clipboard in its next frame
     sale = nil,           -- progress and result of the last sale
     stop_requested = false,
 }
@@ -115,6 +130,14 @@ local function save_picks(force)
     if picks.save(store, files.write_json, files.read_json) then return true end
     log_error("could not save the picks file for save slot " .. tostring(store.slot))
     if force then state.notice = T("notice_picks_not_saved") end
+    return false
+end
+
+local function save_stars()
+    local store = state.stars
+    if not store or not store.dirty or store.blocked or store.slot == nil then return true end
+    if stars.save(store, files.write_json, files.read_json) then return true end
+    log_error("could not save the stars file for save slot " .. tostring(store.slot))
     return false
 end
 
@@ -258,14 +281,23 @@ local function scan_job()
         end
     end
 
-    -- Picks belong to one save slot and character.
+    -- Picks and the stars Bulk Sell added belong to one save slot and character.
     local store = state.picks
     if not store or store.slot ~= stats.save_slot or store.play_start ~= stats.play_start then
-        if store then save_picks() end
-        local read = stats.save_slot ~= nil and files.reader({ picks.paths(stats.save_slot).a, picks.paths(stats.save_slot).b })
-            or files.read_json
+        if store then
+            save_picks()
+            save_stars()
+        end
+        local read = files.read_json
+        if stats.save_slot ~= nil then
+            local p, st = picks.paths(stats.save_slot), stars.paths(stats.save_slot)
+            read = files.reader({ p.a, p.b, st.a, st.b })
+        end
         state.picks = picks.load(stats.save_slot, stats.play_start, read)
+        state.stars = stars.load(stats.save_slot, stats.play_start, read)
     end
+    for _, key in ipairs(stars.stale_keys(state.stars, charms)) do stars.forget(state.stars, key) end
+    save_stars()
     analyse(charms, stats, new_count)
 end
 
@@ -488,6 +520,108 @@ local function sell_job(confirm)
     state.stale = true
 end
 
+-- Sets (want = true) or removes the favorite star of exactly the keys of a confirmation.
+local function star_job(job)
+    local run = { kind = job.kind, want = job.want, total = #job.keys, done = 0, changed = 0, skipped = {} }
+    state.star_run = run
+    local ctx, reason = game.begin_star()
+    if not ctx then error(reason, 0) end
+    local scan = state.scan
+    local ok, err = pcall(function()
+        if not scan or scan.revision ~= job.revision then
+            run.stopped = LIST_CHANGED
+            return
+        end
+        for _, key in ipairs(job.keys) do
+            if state.stop_requested then
+                run.stopped = T("stop_by_you")
+                return
+            end
+            if not reframework:is_drawing_ui() then
+                run.stopped = T("stop_menu_closed")
+                return
+            end
+            local blocked = game.menu_block_reason()
+            if blocked then
+                run.stopped = blocked
+                return
+            end
+            local charm = scan.by_key[key]
+            local result = game.set_favorite(ctx, charm, job.want)
+            run.done = run.done + 1
+            if result.done then
+                run.changed = run.changed + 1
+                if job.want then stars.add(state.stars, charm) else stars.forget(state.stars, key) end
+            elseif result.already then
+                if not job.want then stars.forget(state.stars, key) end
+            elseif result.fatal then
+                run.stopped = result.reason
+                log_error(result.reason)
+                return
+            else
+                run.skipped[#run.skipped + 1] = { box = key, reason = result.reason }
+            end
+            coroutine.yield()
+        end
+    end)
+    if not ok then
+        run.stopped = T("stop_error", tostring(err))
+        log_error(run.stopped)
+    end
+    if not save_stars() then run.stopped = run.stopped or T("stars_not_saved") end
+    run.finished = true
+    -- Favorites are protected, so the plan changes.
+    state.stale = true
+end
+
+local function write_text(path, text)
+    if type(fs) ~= "table" or type(fs.write) ~= "function" then return false end
+    local ok, result = pcall(fs.write, path, text)
+    return ok and result ~= false
+end
+
+-- Skill names for an export: the game's language, or another one through the game's texts.
+local function export_names(list, language)
+    if language == nil then return state.skill_names, false end
+    local names, missing = {}, false
+    for _, charm in ipairs(list) do
+        for _, skill in ipairs(charm.skills) do
+            if names[skill.id] == nil then
+                local name = game.skill_name_in(skill.id, language)
+                if not name then missing = true end
+                names[skill.id] = name or state.skill_names[skill.id]
+            end
+        end
+    end
+    return names, missing
+end
+
+local function export_job(job)
+    local scan = state.scan
+    local list = export.select(scan.charms, scan.verdicts, job.scope)
+    local stamp = os.date("%Y%m%d_%H%M%S")
+    local result = { kind = job.kind, count = #list }
+    if job.kind == "wikidb" then
+        local names, missing = export_names(list, job.language[2])
+        local text = export.wikidb(list, names)
+        result.missing_names = missing
+        state.clipboard = text
+        result.path = EXPORT_DIR .. "wikidb_" .. job.language[3] .. "_" .. stamp .. ".txt"
+        if not write_text(result.path, text) then result.path = nil end
+    else
+        local ctx = scan.ctx
+        local text = export.csv(list, scan.verdicts, state.skill_names,
+            function(v) return explain.verdict_label(ctx, v) end,
+            function(charm, v) return (explain.why(ctx, charm, v)) end)
+        result.path = EXPORT_DIR .. "talismans_" .. stamp .. ".csv"
+        if not write_text(result.path, text) then
+            result.path = nil
+            result.failed = true
+        end
+    end
+    state.export_result = result
+end
+
 local function start(name, job)
     state.job = coroutine.create(job)
     state.job_name = name
@@ -601,6 +735,48 @@ local actions = {
         table.remove(state.notices, i)
     end,
 
+    -- Stars: kind "kept" (every kept talisman), "picks" (your Keep picks) or "remove" (the
+    -- stars Bulk Sell added). Nothing happens before confirm_star.
+    request_star = function(kind)
+        local scan = state.scan
+        if not scan or state.job or state.stale or not state.stars or state.stars.blocked then return end
+        local keys, want = {}, kind ~= "remove"
+        if kind == "remove" then
+            for i, charm in ipairs(stars.removable(state.stars, scan.charms)) do keys[i] = charm.key end
+        else
+            for _, charm in ipairs(scan.charms) do
+                local v = scan.verdicts[charm.key]
+                if v.action == "keep" and not charm.favorite and (kind == "kept" or v.reason == "picked") then
+                    keys[#keys + 1] = charm.key
+                end
+            end
+        end
+        if #keys == 0 then return end
+        state.star_confirm = { kind = kind, keys = keys, want = want, revision = scan.revision }
+    end,
+    confirm_star = function()
+        local job = state.star_confirm
+        state.star_confirm = nil
+        if not job or state.job or state.block_reason or state.stale or not state.scan or state.scan.revision ~= job.revision then return end
+        state.stop_requested = false
+        start("star", function() star_job(job) end)
+    end,
+    cancel_star = function()
+        state.star_confirm = nil
+    end,
+    -- Exports: scope "all" / "stays" / "sell"; language index into EXPORT_LANGUAGES.
+    export_wikidb = function(scope, language)
+        if not state.scan or state.job then return end
+        start("export", function() export_job({ kind = "wikidb", scope = scope, language = EXPORT_LANGUAGES[language] or EXPORT_LANGUAGES[1] }) end)
+    end,
+    export_csv = function(scope)
+        if not state.scan or state.job then return end
+        start("export", function() export_job({ kind = "csv", scope = scope }) end)
+    end,
+    clipboard_done = function()
+        state.clipboard = nil
+    end,
+
     -- Skills panel: one skill, the skills a Find shows, Undo and Reset all.
     set_skill = function(id, pref)
         state.skills_undo = skills.copy_prefs(state.settings)
@@ -653,7 +829,7 @@ local function on_menu_closed()
         state.stale = true
         withdraw_confirm()
     end
-    if state.job and state.job_name ~= "sell" then cancel_job() end
+    if state.job and not STOPS_ITSELF[state.job_name] then cancel_job() end
 end
 
 game.install_hooks()
@@ -669,7 +845,7 @@ re.on_pre_application_entry("UpdateBehavior", function()
     if drawing and state.settings.window_open then
         local reason, touched = game.menu_block_reason()
         if touched or game.take_list_opened() then
-            if state.scan and not state.stale and state.job_name ~= "sell" then
+            if state.scan and not state.stale and not STOPS_ITSELF[state.job_name] then
                 state.stale = true
                 withdraw_confirm()
             end
@@ -697,7 +873,7 @@ re.on_pre_application_entry("UpdateBehavior", function()
     local job = state.job
     if not job then return end
     -- A scan or analysis is only worth finishing while the player can see it.
-    if not drawing and state.job_name ~= "sell" then return end
+    if not drawing and not STOPS_ITSELF[state.job_name] then return end
 
     local job_stats = state.job_stats
     job_stats.frames = job_stats.frames + 1
@@ -735,9 +911,11 @@ end)
 re.on_config_save(function()
     config.save(state.settings)
     save_picks()
+    save_stars()
 end)
 
 -- Offline tests set BULKSELL_TEST before loading the script to reach its state.
+state.export_languages = EXPORT_LANGUAGES
 if type(BULKSELL_TEST) == "table" then
     BULKSELL_TEST.state = state
     BULKSELL_TEST.actions = actions
