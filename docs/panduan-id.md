@@ -167,10 +167,11 @@ Hati-hati: import **mengganti** seluruh daftar talisman di situs itu. Kalau mau 
 
 ### Diberi tahu saat ada talisman baru masuk
 1. Buka **Script Generated UI → Bulk Sell Equipment**, lalu centang **Tell me about new items while the menu is closed (auto-clean)**. Kalau mau, centang juga **Also tell me when the Equipment Box is almost full**.
-2. Main seperti biasa. Setiap kali hadiah quest atau Melding Pot memasukkan barang baru ke box, muncul pesan kecil di pojok layar selama beberapa detik:
-   > Equipment Box: 3 new items since your last scan. Open Bulk Sell (Insert) to check.
+2. Main seperti biasa. Setiap kali hadiah quest atau Melding Pot memasukkan barang baru ke box, muncul pesan di kanan layar selama beberapa detik, dengan gaya seperti notifikasi game:
+   > **Bulk Sell**
+   > 3 new items in your Equipment Box since your last scan. Open Bulk Sell (Insert) to check.
 
-   Pesan ini menunggu sampai layar hasil quest selesai, dan tidak pernah menjual apa pun.
+   Pesan ini menunggu sampai layar hasil quest selesai. Kamu tetap bisa main seperti biasa selama pesan tampil, dan pesan ini tidak pernah menjual apa pun. Mau lihat contohnya dulu? Klik **Show a test message**, lalu tutup menu REFramework.
 3. Tekan **Insert**. Window akan scan ulang sendiri, lalu menampilkan "3 new talismans since you last cleared them." Klik **Show new** untuk melihat hanya talisman-talisman baru itu.
 4. Jual yang tidak kamu butuhkan dengan **Sell the N shown**, atau klik **Clear** kalau mau mengabaikannya.
 

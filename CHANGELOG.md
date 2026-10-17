@@ -5,7 +5,7 @@
 Know when new talismans arrive.
 
 **New**
-- **Auto-clean watch** (off by default; switch it on in Script Generated UI > Bulk Sell Equipment): while the REFramework menu is closed, Bulk Sell looks at your Equipment Box every 5 seconds. When new items arrive (quest rewards, the Melding Pot), a short message appears in a corner: "Equipment Box: 3 new items since your last scan. Open Bulk Sell (Insert) to check." It waits while the quest result screen is up. It never sells anything on its own.
+- **Auto-clean watch** (off by default; switch it on in Script Generated UI > Bulk Sell Equipment): while the REFramework menu is closed, Bulk Sell looks at your Equipment Box every 5 seconds. When new items arrive (quest rewards, the Melding Pot), a short message appears on the right of the screen, drawn like the game's own notices: "3 new items in your Equipment Box since your last scan. Open Bulk Sell (Insert) to check." It counts every new item, also when the Melding Pot first takes talismans out. It waits while the quest result screen is up, takes no input, and never sells anything on its own. **Show a test message** shows what it looks like.
 - **New arrivals** filter and line: talismans that were not in the box at your last scan, with Show new and Clear. Sales from that filter are recorded as "auto-clean" in the receipt.
 - **Almost-full message** (optional): when fewer than 50, then fewer than 10, box slots are free.
 

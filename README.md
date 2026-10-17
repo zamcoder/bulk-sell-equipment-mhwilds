@@ -91,7 +91,7 @@ What this means in practice:
 - **Stars:** "Star the N kept", "Star my Keep picks" and "Remove stars Bulk Sell added" use the game's own favorite star. Bulk Sell never sells favorites, other mods such as Talisman Analyser skip them too, and the star shows in the game's own lists. Bulk Sell remembers which stars it added and never removes yours.
 - **Export:** "Copy for mhwilds.wiki-db.com" puts your talismans (all, what stays, or only the sales) on the clipboard in the format of the site's Talisman tab, and "Save CSV" writes a spreadsheet. Names can be in the game's language or in English, Japanese, Korean or Chinese.
 - **Melding Pot comparison:** the summary also shows how many Melding Pot points the planned sales would be worth instead of zenny.
-- **Auto-clean watch** (off by default): while the REFramework menu is closed, the mod tells you in a small message when new items arrive or the box is almost full. The **New arrivals** filter then lists the new talismans. It never sells without your click.
+- **Auto-clean watch** (off by default): while the REFramework menu is closed, the mod tells you when new items arrive or the box is almost full, with a message on the right of the screen in the style of the game's own notices. The **New arrivals** filter then lists the new talismans. It never sells without your click.
 - **Pays the game's own price:** 1,500 / 3,000 / 4,500 / 8,000 z for rarity 5 / 6 / 7 / 8.
 - **Writes a JSON receipt** for every sale run, with the rules used and why each talisman was sold.
 
